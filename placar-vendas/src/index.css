@@ -1,0 +1,36 @@
+@import "tailwindcss";
+@import "@fontsource/geist-sans/400.css";
+@import "@fontsource/geist-sans/500.css";
+@import "@fontsource/geist-sans/600.css";
+@import "@fontsource/geist-sans/700.css";
+
+@theme {
+  --color-zinc-950: #09090b;
+  --color-brand-accent: #10b981; /* Emerald 500 for success/1st place */
+  --font-sans: "Geist Sans", sans-serif;
+  --color-background: var(--color-zinc-950);
+  --color-foreground: #ffffff;
+}
+
+:root {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
+
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Taste-skill: Liquid Glass Refraction */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1),
+              0 20px 40px -15px rgba(0,0,0,0.5);
+  border-radius: 1.5rem;
+}
