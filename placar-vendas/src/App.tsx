@@ -3,7 +3,9 @@ import { fetchPlacarData } from "./services/GoogleSheetsService";
 import type { DashboardData, RankedSeller } from "./services/GoogleSheetsService";
 import { TeamBoard } from "./components/TeamBoard";
 import { MetaCelebration } from "./components/MetaCelebration";
+import { FloatingParticles } from "./components/FloatingParticles";
 import { DAILY_GOAL } from "./config/teams";
+import { motion } from "framer-motion";
 
 function App() {
   const [data, setData] = useState<DashboardData>({ teams: [], winningTeam: null });
@@ -87,16 +89,34 @@ function App() {
 
   // Enquanto a celebração está rolando, bloqueamos o fundo (mas ele continua atualizando nos state hidden)
   return (
-    <main className="h-[100dvh] w-screen bg-zinc-950 font-sans text-white overflow-hidden flex flex-col p-2 lg:p-6">
+    <main className="relative h-[100dvh] w-screen bg-zinc-950 font-sans text-white overflow-hidden flex flex-col p-2 lg:p-6">
+      {/* BOLA COM BLUR DE FUNDO */}
+      <motion.div
+        className="absolute top-[10%] left-[20%] w-[60vw] h-[60vw] max-w-[600px] max-h-[600px] rounded-full bg-emerald-500/20 blur-[120px] pointer-events-none"
+        animate={{
+          x: ["0vw", "20vw", "-20vw", "10vw", "0vw"],
+          y: ["0vh", "30vh", "10vh", "-20vh", "0vh"],
+          scale: [1, 1.2, 0.8, 1.1, 1],
+        }}
+        transition={{
+          duration: 20,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      />
+
+      {/* PARTICULAS FLUTUANTES (CICLO DE MINUTOS) */}
+      <FloatingParticles />
+
       {/* CABEÇALHO DO PLACAR */}
-      <div className="flex-shrink-0 flex justify-center mb-4 lg:mb-6 pt-2">
+      <div className="relative z-10 flex-shrink-0 flex justify-center mb-4 lg:mb-6 pt-2">
         <h1 className="text-[clamp(2rem,6vh,4rem)] tracking-tighter uppercase font-black bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-teal-200 drop-shadow-sm leading-none">
           Placar dos Times
         </h1>
       </div>
 
       {/* DASHBOARD GRID */}
-      <div className="flex-1 w-full mx-auto grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-8 min-h-0 pb-4">
+      <div className="relative z-10 flex-1 w-full mx-auto grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-8 min-h-0 pb-4">
         {data.teams.map((team) => (
           <div key={team.teamName} className="relative min-h-0 flex flex-col rounded-3xl overflow-hidden glass-panel">
             <TeamBoard teamData={team} isWinning={data.winningTeam === team.teamName} />
@@ -114,6 +134,15 @@ function App() {
         seller={celebratingSeller} 
         onFinished={() => setCelebratingSeller(null)} 
       />
+
+      {/* LOGO INFERIOR */}
+      <div className="absolute bottom-2 lg:bottom-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+        <img 
+          src="/img/Logo Nosso Consignado.png" 
+          alt="Nosso Consignado" 
+          className="h-5 lg:h-8 object-contain opacity-70 drop-shadow-sm mix-blend-screen" 
+        />
+      </div>
     </main>
   );
 }

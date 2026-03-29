@@ -24,7 +24,7 @@ export function TeamBoard({ teamData, isWinning }: TeamBoardProps) {
              <img
                src={`/img/LOGO ${teamData.teamName}.png`}
                alt={`Logo ${teamData.teamName}`}
-               className="w-[clamp(4rem,10vh,6rem)] h-[clamp(4rem,10vh,6rem)] object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.1)]"
+               className="w-[clamp(6rem,14vh,9rem)] h-[clamp(6rem,14vh,9rem)] object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.2)] scale-110"
                onError={(e) => {
                  // Fallback: tentar .png ou esconder se não achar
                  const img = e.currentTarget;
