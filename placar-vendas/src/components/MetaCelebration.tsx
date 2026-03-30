@@ -68,7 +68,7 @@ export function MetaCelebration({ seller, onFinished }: MetaCelebrationProps) {
             onEnded={handleVideoEnded}
             onCanPlay={(e) => {
               e.currentTarget.style.display = 'block';
-              e.currentTarget.play().catch(err => {
+              e.currentTarget.play().catch(() => {
                  console.log("Autoplay mitigado com som");
               });
             }}
