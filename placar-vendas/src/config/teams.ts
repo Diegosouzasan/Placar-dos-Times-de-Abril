@@ -18,10 +18,10 @@ export interface LeaderConfig {
 export const LEADERS_CONFIG: Record<TeamName, LeaderConfig> = {
   "TROPA DE ELITE": {
     name: "GUSTAVO",
-    photoUrl: "/img/GUSTAVO.jpg",
+    photoUrl: "/img/Gustavo.png",
   },
   "AGUIAS": {
     name: "CLAUDENISE",
-    photoUrl: "/img/CLAUDENISE.jpg",
+    photoUrl: "/img/Claudenise.png",
   },
 };

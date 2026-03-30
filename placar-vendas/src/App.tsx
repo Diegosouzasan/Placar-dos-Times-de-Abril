@@ -42,12 +42,8 @@ function App() {
               celebratedSellersRef.current.add(seller.name);
             }
 
-            // Proteção contra o "Jitter" (Atraso) dos Servidores do Google Sheets.
-            // O Google às vezes entrega uma versão velha da planilha misturada com a nova.
-            // Se as vendas caírem por causa do delay, forçamos o valor mais alto a continuar na tela, exceto se for reset.
-            if (seller.sales < previousSales && seller.sales > 0 && (previousSales - seller.sales) < 100000) {
-               seller.sales = previousSales;
-            }
+            // Proteção contra o "Jitter" foi removida a pedido do usuário
+            // para permitir que o placar seja atualizado caso o valor de uma venda diminua.
           }
 
           // Como corrigimos os valores pra não oscilarem, precisamos recalcular os times

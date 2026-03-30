@@ -107,7 +107,15 @@ export function MetaCelebration({ seller, onFinished }: MetaCelebrationProps) {
                <img
                  src={seller.photoUrl}
                  alt={seller.name}
-                 className="w-24 h-24 rounded-full border-4 border-emerald-500 shadow-xl object-cover"
+                 className="w-24 h-24 rounded-full border-4 border-emerald-500 shadow-xl object-cover bg-zinc-800"
+                 onError={(e) => {
+                   const img = e.currentTarget;
+                   if (img.src.endsWith('.jpg')) {
+                     img.src = `/img/${encodeURIComponent(seller.name)}.png`;
+                   } else {
+                     img.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(seller.name)}&background=3f3f46&color=fff`;
+                   }
+                 }}
                />
             </div>
             
