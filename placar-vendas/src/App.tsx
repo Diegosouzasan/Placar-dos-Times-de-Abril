@@ -1,89 +1,86 @@
 import { useEffect, useState, useRef } from "react";
-import { fetchPlacarData } from "./services/GoogleSheetsService";
-import type { DashboardData, RankedSeller } from "./services/GoogleSheetsService";
+import { fetchPlacarData, type DashboardData, type RankedSeller } from "./services/SupabaseService";
+import { supabase } from "./services/supabaseClient";
 import { TeamBoard } from "./components/TeamBoard";
 import { MetaCelebration } from "./components/MetaCelebration";
 import { FloatingParticles } from "./components/FloatingParticles";
+import Controller from "./components/Controller";
 import { DAILY_GOAL } from "./config/teams";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 function App() {
   const [data, setData] = useState<DashboardData>({ teams: [], winningTeam: null });
   const [celebratingSeller, setCelebratingSeller] = useState<RankedSeller | null>(null);
+  const [isAdmin, setIsAdmin] = useState(window.location.hash === "#/admin");
   
-  // Guardamos as vendas anteriores para proteção contra oscilação
-  const previousSalesRef = useRef<Record<string, number>>({});
-  // Guardamos quem já bateu a meta nessa sessão para impedir o loop
-  const celebratedSellersRef = useRef<Set<string>>(new Set());
+  const celebratedSellersRef = useRef<Set<number>>(new Set());
   const isFirstLoadRef = useRef(true);
 
-  // Polling para atualizar o placar
+  // Escutar mudança de Hash para Navegação
   useEffect(() => {
-    let timeoutId: ReturnType<typeof setTimeout>;
-
-    const pollData = async () => {
-      try {
-        const newData = await fetchPlacarData();
-        
-        if (!isFirstLoadRef.current) {
-          const allSellers = newData.teams.flatMap(t => t.sellers);
-          
-          for (const seller of allSellers) {
-            const previousSales = previousSalesRef.current[seller.name] || 0;
-            
-            // Se o valor zerar, liberamos para comemorar de novo amanhã/próximo ciclo
-            if (seller.sales === 0 && previousSales > 0) {
-               celebratedSellersRef.current.delete(seller.name);
-            }
-
-            // Impede a dupla comemoração: só aciona se nunca comemorou na sessão
-            if (seller.sales >= DAILY_GOAL && !celebratedSellersRef.current.has(seller.name)) {
-              setCelebratingSeller(seller);
-              celebratedSellersRef.current.add(seller.name);
-            }
-
-            // Proteção contra o "Jitter" foi removida a pedido do usuário
-            // para permitir que o placar seja atualizado caso o valor de uma venda diminua.
-          }
-
-          // Como corrigimos os valores pra não oscilarem, precisamos recalcular os times
-          newData.teams.forEach(team => {
-            team.totalSales = team.sellers.reduce((sum, s) => sum + s.sales, 0);
-            team.sellers.sort((a,b) => b.sales - a.sales);
-          });
-
-          // Re-avaliar quem está ganhando
-          if (newData.teams.length === 2) {
-             const t1 = newData.teams[0];
-             const t2 = newData.teams[1];
-             if (t1.totalSales > t2.totalSales) newData.winningTeam = t1.teamName;
-             else if (t2.totalSales > t1.totalSales) newData.winningTeam = t2.teamName;
-             else newData.winningTeam = null;
-          }
-        }
-
-        // Registrar Snapshot Oficial dessa amostragem
-        const newSalesMap: Record<string, number> = {};
-        newData.teams.flatMap(t => t.sellers).forEach(s => {
-          newSalesMap[s.name] = s.sales;
-        });
-        previousSalesRef.current = newSalesMap;
-        isFirstLoadRef.current = false;
-        
-        setData(newData);
-      } catch (error) {
-        console.error("Erro ao fazer polling do Google Sheets:", error);
-      } finally {
-        timeoutId = setTimeout(pollData, 10000); // 10s de intervalo
-      }
+    const handleHashChange = () => {
+      setIsAdmin(window.location.hash === "#/admin");
     };
-
-    pollData();
-
-    return () => clearTimeout(timeoutId);
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
 
-  // Enquanto a celebração está rolando, bloqueamos o fundo (mas ele continua atualizando nos state hidden)
+  // Busca inicial e Realtime
+  useEffect(() => {
+    if (isAdmin) return;
+
+    const loadAndListen = async () => {
+      try {
+        const initialData = await fetchPlacarData();
+        setData(initialData);
+        isFirstLoadRef.current = false;
+      } catch (err) {
+        console.error("Erro ao carregar dados do Supabase:", err);
+      }
+
+      // Configurar Realtime
+      const channel = supabase
+        .channel('dashboard-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'sellers' }, async (payload: any) => {
+          const newData = await fetchPlacarData();
+          
+          // Lógica de Celebração
+          if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
+             const updatedSeller = payload.new;
+             if (updatedSeller.total_sales >= DAILY_GOAL && !celebratedSellersRef.current.has(updatedSeller.id)) {
+                // Encontrar o vendedor no novo dataset para ter os dados completos (foto, etc)
+                const fullSeller = newData.teams.flatMap(t => t.sellers).find(s => s.id === updatedSeller.id);
+                if (fullSeller) {
+                   setCelebratingSeller(fullSeller);
+                   celebratedSellersRef.current.add(updatedSeller.id);
+                }
+             }
+             // Se resetar o valor, permitir comemorar de novo
+             if (updatedSeller.total_sales === 0) {
+                celebratedSellersRef.current.delete(updatedSeller.id);
+             }
+          }
+          
+          setData(newData);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, async () => {
+          const newData = await fetchPlacarData();
+          setData(newData);
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    };
+
+    loadAndListen();
+  }, [isAdmin]);
+
+  if (isAdmin) {
+    return <Controller />;
+  }
+
   return (
     <main className="relative h-[100dvh] w-screen bg-zinc-950 font-sans text-white overflow-hidden flex flex-col p-2 lg:p-6">
       {/* BOLA COM BLUR DE FUNDO */}
@@ -101,7 +98,7 @@ function App() {
         }}
       />
 
-      {/* PARTICULAS FLUTUANTES (CICLO DE MINUTOS) */}
+      {/* PARTICULAS FLUTUANTES */}
       <FloatingParticles />
 
       {/* CABEÇALHO DO PLACAR */}
@@ -115,12 +112,12 @@ function App() {
       <div className="relative z-10 flex-1 w-full mx-auto grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-8 min-h-0 pb-4">
         {data.teams.map((team) => (
           <div key={team.teamName} className="relative min-h-0 flex flex-col rounded-3xl overflow-hidden glass-panel">
-            <TeamBoard teamData={team} isWinning={data.winningTeam === team.teamName} />
+            <TeamBoard teamData={team as any} isWinning={data.winningTeam === team.teamName} />
           </div>
         ))}
         {data.teams.length === 0 && (
           <div className="col-span-1 lg:col-span-2 text-center text-zinc-500 font-mono text-xl mt-20 animate-pulse">
-            Sincronizando com o Google Sheets...
+            Sincronizando com o Supabase...
           </div>
         )}
       </div>
@@ -139,6 +136,16 @@ function App() {
           className="h-5 lg:h-8 object-contain opacity-70 drop-shadow-sm mix-blend-screen" 
         />
       </div>
+
+      {/* BOTAO PARA ADMIN (Discreto) */}
+      <a 
+        href="#/admin" 
+        className="absolute bottom-4 right-4 z-30 p-2 bg-white/5 hover:bg-white/10 rounded-full opacity-20 hover:opacity-100 transition-opacity"
+        title="Painel de Controle"
+      >
+        <span className="sr-only">Admin</span>
+        ⚙️
+      </a>
     </main>
   );
 }

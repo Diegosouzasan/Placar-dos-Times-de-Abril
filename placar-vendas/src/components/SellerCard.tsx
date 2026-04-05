@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import clsx from "clsx";
-import type { RankedSeller } from "../services/GoogleSheetsService";
+import type { RankedSeller } from "../services/SupabaseService";
 import { Coins } from "lucide-react";
 import { DAILY_GOAL } from "../config/teams";
 

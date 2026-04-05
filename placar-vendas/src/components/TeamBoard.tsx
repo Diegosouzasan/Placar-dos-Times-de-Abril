@@ -1,4 +1,4 @@
-import type { TeamData } from "../services/GoogleSheetsService";
+import type { TeamData } from "../services/SupabaseService";
 import { SellerCard } from "./SellerCard";
 import { Trophy } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
