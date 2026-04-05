@@ -6,7 +6,7 @@ import { MetaCelebration } from "./components/MetaCelebration";
 import { FloatingParticles } from "./components/FloatingParticles";
 import Controller from "./components/Controller";
 import { DAILY_GOAL } from "./config/teams";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
 function App() {
   const [data, setData] = useState<DashboardData>({ teams: [], winningTeam: null });

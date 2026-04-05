@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { 
   fetchPlacarData, 
@@ -8,8 +8,7 @@ import {
   deleteSeller, 
   moveSeller,
   type DashboardData,
-  type TeamData,
-  type RankedSeller
+  type TeamData
 } from '../services/SupabaseService';
 import { Plus, Trash2, Users, ArrowLeftRight, Save, X } from 'lucide-react';
 
