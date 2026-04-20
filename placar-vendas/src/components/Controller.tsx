@@ -14,7 +14,7 @@ import {
   type DashboardData,
   type TeamData
 } from '../services/SupabaseService';
-import { Plus, Trash2, Users, ArrowLeftRight, Save, X, Calendar, Zap, Monitor, CheckCircle2, RotateCcw, Upload, Image as ImageIcon, Film } from 'lucide-react';
+import { Plus, Trash2, Users, ArrowLeftRight, Save, X, Zap, Monitor, CheckCircle2, RotateCcw, Upload, Image as ImageIcon } from 'lucide-react';
 
 export default function Controller() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -24,7 +24,6 @@ export default function Controller() {
   const [newSellerName, setNewSellerName] = useState("");
   const [newSellerPhoto, setNewSellerPhoto] = useState<File | null>(null);
   const [selectedTeamForNewSeller, setSelectedTeamForNewSeller] = useState<number | null>(null);
-  const [isUpdatingSettings, setIsUpdatingSettings] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
