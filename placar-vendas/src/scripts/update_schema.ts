@@ -12,7 +12,7 @@ async function updateSchema() {
         console.log("Verificando colunas da tabela sellers...");
         // Infelizmente pelo REST API não temos como adicionar colunas facilmente sem ser via SQL no dashboard
         // Mas podemos tentar verificar se as colunas já existem fazendo um select
-        const { data, error } = await supabase.from("sellers").select("weekly_sales").limit(1);
+        const { error } = await supabase.from("sellers").select("weekly_sales").limit(1);
         
         if (error && error.message.includes("column \"weekly_sales\" does not exist")) {
              console.error("ERRO: A coluna 'weekly_sales' não existe na tabela 'sellers'.");
