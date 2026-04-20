@@ -6,6 +6,7 @@ export interface RankedSeller {
   name: string;
   team: TeamName;
   sales: number;
+  weeklySales: number;
   photoUrl: string;
 }
 
@@ -25,6 +26,17 @@ export interface TeamData {
 export interface DashboardData {
   teams: TeamData[];
   winningTeam: TeamName | null;
+  settings?: PlacarSettings;
+}
+
+export interface PlacarSettings {
+  id: number;
+  daily_goal: number;
+  weekly_goal: number;
+  is_meta_active: boolean;
+  meta_days: string;
+  overlay_url: string;
+  is_overlay_active: boolean;
 }
 
 export async function fetchPlacarData(): Promise<DashboardData> {
@@ -44,7 +56,13 @@ export async function fetchPlacarData(): Promise<DashboardData> {
 
   if (sellersError) throw sellersError;
 
-  // 3. Assemble Dashboard Data
+  // 3. Fetch Settings
+  const { data: settingsData } = await supabase
+    .from("placar_settings")
+    .select("*")
+    .single();
+
+  // 4. Assemble Dashboard Data
   const teams: TeamData[] = teamsData.map((t: any) => {
     const teamSellers = sellersData
       .filter((s: any) => s.team_id === t.id)
@@ -53,6 +71,7 @@ export async function fetchPlacarData(): Promise<DashboardData> {
         name: s.name,
         team: t.name as TeamName,
         sales: Number(s.total_sales),
+        weeklySales: Number(s.weekly_sales || 0),
         photoUrl: s.photo_url || `/img/${encodeURIComponent(s.name.split(" ")[0])}.png`
       }));
 
@@ -80,15 +99,73 @@ export async function fetchPlacarData(): Promise<DashboardData> {
     else if (teams[1].totalSales > teams[0].totalSales) winningTeam = teams[1].teamName;
   }
 
-  return { teams, winningTeam };
+  return { teams, winningTeam, settings: settingsData };
+}
+
+// Settings and Meta Actions
+export async function updateSettings(settings: Partial<PlacarSettings>) {
+  const { error } = await supabase
+    .from("placar_settings")
+    .update(settings)
+    .eq("id", 1);
+  if (error) throw error;
+}
+
+export async function finalizeWeeklyMeta() {
+  // Reset all weekly_sales and total_sales to 0
+  const { error } = await supabase
+    .from("sellers")
+    .update({ 
+      total_sales: 0,
+      weekly_sales: 0 
+    })
+    .neq("id", 0);
+  
+  if (error) throw error;
+
+  // Deactivate meta
+  await updateSettings({ is_meta_active: false });
+}
+
+export async function resetDailySales() {
+  // Reset ONLY total_sales to 0, keeping weekly_sales intact
+  const { error } = await supabase
+    .from("sellers")
+    .update({ 
+      total_sales: 0
+    })
+    .neq("id", 0);
+  
+  if (error) throw error;
 }
 
 // Control Actions
-export async function updateSellerSales(sellerId: number, sales: number) {
+export async function updateSellerSales(sellerId: number, newDaySales: number) {
+  // To handle the weekly accumulation, we first need the current values
+  const { data: seller, error: fetchError } = await supabase
+    .from("sellers")
+    .select("total_sales, weekly_sales")
+    .eq("id", sellerId)
+    .single();
+
+  if (fetchError) throw fetchError;
+
+  const currentDaySales = Number(seller.total_sales || 0);
+  const currentWeeklySales = Number(seller.weekly_sales || 0);
+
+  // The difference between the new input and the current day sales 
+  // is what should be added/subtracted from the weekly total.
+  const diff = newDaySales - currentDaySales;
+  const newWeeklySales = currentWeeklySales + diff;
+
   const { error } = await supabase
     .from("sellers")
-    .update({ total_sales: sales })
+    .update({ 
+      total_sales: newDaySales, 
+      weekly_sales: Math.max(0, newWeeklySales) 
+    })
     .eq("id", sellerId);
+
   if (error) throw error;
 }
 
@@ -110,7 +187,8 @@ export async function addSeller(name: string, teamId: number, photoUrl?: string)
       name, 
       team_id: teamId, 
       photo_url: photoUrl || `/img/${encodeURIComponent(name.split(" ")[0])}.png`,
-      total_sales: 0 
+      total_sales: 0,
+      weekly_sales: 0
     }]);
   if (error) throw error;
 }
@@ -129,4 +207,22 @@ export async function moveSeller(sellerId: number, newTeamId: number) {
     .update({ team_id: newTeamId })
     .eq("id", sellerId);
   if (error) throw error;
+}
+
+export async function uploadFile(file: File, path: string, bucket: string = "media") {
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+  const filePath = `${path}/${fileName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from(bucket)
+    .upload(filePath, file);
+
+  if (uploadError) throw uploadError;
+
+  const { data } = supabase.storage
+    .from(bucket)
+    .getPublicUrl(filePath);
+
+  return data.publicUrl;
 }

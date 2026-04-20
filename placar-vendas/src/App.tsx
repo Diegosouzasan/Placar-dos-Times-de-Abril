@@ -5,8 +5,7 @@ import { TeamBoard } from "./components/TeamBoard";
 import { MetaCelebration } from "./components/MetaCelebration";
 import { FloatingParticles } from "./components/FloatingParticles";
 import Controller from "./components/Controller";
-import { DAILY_GOAL } from "./config/teams";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 function App() {
   const [data, setData] = useState<DashboardData>({ teams: [], winningTeam: null });
@@ -15,6 +14,9 @@ function App() {
   
   const celebratedSellersRef = useRef<Set<number>>(new Set());
   const isFirstLoadRef = useRef(true);
+
+  const dailyGoal = data.settings?.daily_goal || 20000;
+  const weeklyGoal = data.settings?.weekly_goal || 100000;
 
   // Escutar mudança de Hash para Navegação
   useEffect(() => {
@@ -29,7 +31,9 @@ function App() {
   useEffect(() => {
     if (isAdmin) return;
 
-    const loadAndListen = async () => {
+    let channel: any;
+
+    const init = async () => {
       try {
         const initialData = await fetchPlacarData();
         setData(initialData);
@@ -39,7 +43,7 @@ function App() {
       }
 
       // Configurar Realtime
-      const channel = supabase
+      channel = supabase
         .channel('dashboard-realtime')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'sellers' }, async (payload: any) => {
           const newData = await fetchPlacarData();
@@ -47,15 +51,15 @@ function App() {
           // Lógica de Celebração
           if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
              const updatedSeller = payload.new;
-             if (updatedSeller.total_sales >= DAILY_GOAL && !celebratedSellersRef.current.has(updatedSeller.id)) {
-                // Encontrar o vendedor no novo dataset para ter os dados completos (foto, etc)
+             const currentDailyGoal = newData.settings?.daily_goal || 20000;
+
+             if (updatedSeller.total_sales >= currentDailyGoal && !celebratedSellersRef.current.has(updatedSeller.id)) {
                 const fullSeller = newData.teams.flatMap(t => t.sellers).find(s => s.id === updatedSeller.id);
                 if (fullSeller) {
                    setCelebratingSeller(fullSeller);
                    celebratedSellersRef.current.add(updatedSeller.id);
                 }
              }
-             // Se resetar o valor, permitir comemorar de novo
              if (updatedSeller.total_sales === 0) {
                 celebratedSellersRef.current.delete(updatedSeller.id);
              }
@@ -67,22 +71,67 @@ function App() {
           const newData = await fetchPlacarData();
           setData(newData);
         })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'placar_settings' }, async () => {
+          const newData = await fetchPlacarData();
+          setData(newData);
+        })
         .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
     };
 
-    loadAndListen();
+    init();
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
   }, [isAdmin]);
 
   if (isAdmin) {
     return <Controller />;
   }
 
+  const isOverlayActive = data.settings?.is_overlay_active && data.settings?.overlay_url;
+
   return (
     <main className="relative h-[100dvh] w-screen bg-zinc-950 font-sans text-white overflow-hidden flex flex-col p-2 lg:p-6">
+      
+      {/* FULLSCREEN OVERLAY (METAS AVULSAS) */}
+      <AnimatePresence>
+        {isOverlayActive && data?.settings?.overlay_url && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 1.1 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.1 }}
+            className="fixed inset-0 z-[100] bg-black flex items-center justify-center p-4"
+          >
+             {data.settings.overlay_url.toLowerCase().includes('.mp4') || 
+              data.settings.overlay_url.toLowerCase().includes('.mov') ||
+              data.settings.overlay_url.toLowerCase().includes('.webm') ? (
+               <video 
+                 key={data.settings.overlay_url}
+                 src={data.settings.overlay_url} 
+                 className="w-full h-full object-contain shadow-[0_0_50px_rgba(255,255,255,0.2)]" 
+                 autoPlay 
+                 loop 
+                 muted 
+                 playsInline 
+               />
+             ) : (
+               <img 
+                 key={data.settings.overlay_url}
+                 src={data.settings.overlay_url} 
+                 className="w-full h-full object-contain shadow-[0_0_50px_rgba(255,255,255,0.2)]" 
+                 alt="Meta Especial" 
+                 onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                 }}
+               />
+             )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* BOLA COM BLUR DE FUNDO */}
       <motion.div
         className="absolute top-[10%] left-[20%] w-[60vw] h-[60vw] max-w-[600px] max-h-[600px] rounded-full bg-emerald-500/20 blur-[120px] pointer-events-none"
@@ -98,7 +147,6 @@ function App() {
         }}
       />
 
-      {/* PARTICULAS FLUTUANTES */}
       <FloatingParticles />
 
       {/* CABEÇALHO DO PLACAR */}
@@ -112,7 +160,12 @@ function App() {
       <div className="relative z-10 flex-1 w-full mx-auto grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-8 min-h-0 pb-4">
         {data.teams.map((team) => (
           <div key={team.teamName} className="relative min-h-0 flex flex-col rounded-3xl overflow-hidden glass-panel">
-            <TeamBoard teamData={team as any} isWinning={data.winningTeam === team.teamName} />
+            <TeamBoard 
+              teamData={team as any} 
+              isWinning={data.winningTeam === team.teamName} 
+              dailyGoal={dailyGoal}
+              weeklyGoal={weeklyGoal}
+            />
           </div>
         ))}
         {data.teams.length === 0 && (

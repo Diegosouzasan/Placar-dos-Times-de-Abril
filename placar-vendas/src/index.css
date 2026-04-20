@@ -34,3 +34,25 @@ body {
               0 20px 40px -15px rgba(0,0,0,0.5);
   border-radius: 1.5rem;
 }
+
+@keyframes gradient-flow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes sparkle-flow {
+  0% { left: -20%; opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { left: 120%; opacity: 0; }
+}
+
+.animate-gradient-flow {
+  background-size: 200% 200%;
+  animation: gradient-flow 3s linear infinite;
+}
+
+.animate-sparkle {
+  animation: sparkle-flow 3s ease-in-out infinite;
+}

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import type { RankedSeller } from "../services/GoogleSheetsService";
+import type { RankedSeller } from "../services/SupabaseService";
 
 interface MetaCelebrationProps {
   seller: RankedSeller | null;
@@ -14,18 +14,14 @@ export function MetaCelebration({ seller, onFinished }: MetaCelebrationProps) {
 
   const fallbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Iniciar a comemoração
   useEffect(() => {
     if (seller) {
       setIsPlaying(true);
       setVideoUrl(`/videos/${encodeURIComponent(seller.name)}.mp4`);
 
-      // BOMBA-RELÓGIO DE EMERGÊNCIA (15 Segundos).
-      // Se um vídeo estiver com Formato Quebrado/Codec de iPhone (HEVC) e o Google Chrome congelar
-      // sem conseguir dar o Play, nós ativamos esse pino de segurança em 15 segundos para destravar a tela.
       if (fallbackTimeoutRef.current) clearTimeout(fallbackTimeoutRef.current);
       fallbackTimeoutRef.current = setTimeout(() => {
-         console.warn(`[EMERGÊNCIA] O vídeo travou no primeiro frame e não iniciou após 15s. Abortando comemoração para destravar o Placar.`);
+         console.warn(`[EMERGÊNCIA] O vídeo travou no primeiro frame e não iniciou após 15s.`);
          handleVideoEnded();
       }, 15000);
 
@@ -44,7 +40,6 @@ export function MetaCelebration({ seller, onFinished }: MetaCelebrationProps) {
     onFinished();
   };
   
-
   if (!seller) return null;
 
   const formattedSales = new Intl.NumberFormat("pt-BR", {
@@ -61,16 +56,13 @@ export function MetaCelebration({ seller, onFinished }: MetaCelebrationProps) {
           exit={{ opacity: 0, transition: { duration: 1 } }}
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/90 pointer-events-auto"
         >
-          {/* Video em Tela Cheia Dinâmico (Silencioso para Burlar Navegadores e Tocar Sozinho) */}
           <video
             ref={videoRef}
             src={videoUrl}
             onEnded={handleVideoEnded}
             onCanPlay={(e) => {
               e.currentTarget.style.display = 'block';
-              e.currentTarget.play().catch(() => {
-                 console.log("Autoplay mitigado com som");
-              });
+              e.currentTarget.play().catch(() => {});
             }}
             onPlaying={() => {
               if (fallbackTimeoutRef.current) clearTimeout(fallbackTimeoutRef.current);
@@ -93,38 +85,51 @@ export function MetaCelebration({ seller, onFinished }: MetaCelebrationProps) {
             preload="auto"
           />
           
-          {/* Overlay Escuro com Refração */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent pointer-events-none" />
 
           {/* Placar do Vencedor Inferior Centralizado */}
           <motion.div
-            initial={{ y: 50, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.5, type: "spring", damping: 15 }}
-            className="relative z-10 glass-panel rounded-t-3xl rounded-b-none px-12 py-8 mb-0 flex flex-col items-center gap-2 border-b-0 w-full max-w-3xl pointer-events-none"
+            initial={{ y: 100, opacity: 0, scale: 0.8 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            transition={{ delay: 0.3, type: "spring", damping: 15 }}
+            className="relative z-10 bg-zinc-950/80 backdrop-blur-2xl rounded-t-[3rem] px-12 py-10 flex flex-col items-center gap-2 border border-white/10 w-full max-w-2xl pointer-events-none shadow-[0_-20px_50px_rgba(0,0,0,0.5)]"
           >
-            <div className="absolute -top-12">
-               <img
-                 src={seller.photoUrl}
-                 alt={seller.name}
-                 className="w-24 h-24 rounded-full border-4 border-emerald-500 shadow-xl object-cover bg-zinc-800"
-                 onError={(e) => {
-                   const img = e.currentTarget;
-                   if (img.src.endsWith('.jpg')) {
-                     img.src = `/img/${encodeURIComponent(seller.name)}.png`;
-                   } else {
-                     img.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(seller.name)}&background=3f3f46&color=fff`;
-                   }
-                 }}
-               />
+            <div className="absolute -top-16">
+               <motion.div
+                 animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }}
+                 transition={{ repeat: Infinity, duration: 4 }}
+               >
+                 <img
+                   src={seller.photoUrl}
+                   alt={seller.name}
+                   className="w-32 h-32 rounded-full border-4 border-yellow-500 shadow-[0_0_30px_rgba(234,179,8,0.5)] object-cover bg-zinc-800"
+                   onError={(e) => {
+                     const img = e.currentTarget;
+                     if (img.src.endsWith('.jpg')) {
+                       img.src = `/img/${encodeURIComponent(seller.name)}.png`;
+                     } else {
+                       img.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(seller.name)}&background=3f3f46&color=fff`;
+                     }
+                   }}
+                 />
+               </motion.div>
             </div>
             
-            <h1 className="text-4xl lg:text-5xl font-black text-white uppercase tracking-tighter text-center mt-6">
-              META BATIDA: {seller.name}!
+            <h1 className="text-4xl lg:text-6xl font-black text-white uppercase tracking-tighter text-center mt-12 mb-2 italic">
+              META BATIDA: <span className="text-yellow-400">{seller.name}</span>!
             </h1>
-            <p className="text-emerald-400 font-mono text-3xl font-bold tracking-tight">
-              {formattedSales}
-            </p>
+            
+            <div className="flex flex-col items-center gap-1">
+               <span className="text-zinc-500 text-sm font-bold uppercase tracking-widest">Valor Vendido Hoje</span>
+               <motion.p 
+                 initial={{ scale: 0.5, opacity: 0 }}
+                 animate={{ scale: 1, opacity: 1 }}
+                 transition={{ delay: 0.8, type: "spring" }}
+                 className="text-emerald-400 font-mono text-5xl lg:text-6xl font-black tracking-tight drop-shadow-[0_0_15px_rgba(16,185,129,0.4)]"
+               >
+                 {formattedSales}
+               </motion.p>
+            </div>
           </motion.div>
 
         </motion.div>

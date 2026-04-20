@@ -6,27 +6,33 @@ import { motion, AnimatePresence } from "framer-motion";
 interface TeamBoardProps {
   teamData: TeamData;
   isWinning: boolean;
+  dailyGoal: number;
+  weeklyGoal: number;
 }
 
-export function TeamBoard({ teamData, isWinning }: TeamBoardProps) {
+export function TeamBoard({ teamData, isWinning, dailyGoal, weeklyGoal }: TeamBoardProps) {
   const formattedTotal = new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
   }).format(teamData.totalSales);
+
+      const formattedWeeklyGoal = new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(weeklyGoal);
 
   return (
     <div className="flex flex-col p-4 md:p-6 lg:p-10 h-full w-full">
       {/* Header Team */}
       <div className="flex-shrink-0 flex items-center justify-between border-b border-white/10 pb-4 mb-4 lg:pb-6 lg:mb-6">
         <div className="flex items-center gap-3 lg:gap-6">
-          {/* Logo da Equipe */}
+          {/* Logo da Equipe, Fotos, Nome e Badge permanecem iguais */}
           <div className="relative">
              <img
                src={`/img/LOGO ${teamData.teamName}.png`}
                alt={`Logo ${teamData.teamName}`}
                className="w-[clamp(6rem,14vh,9rem)] h-[clamp(6rem,14vh,9rem)] object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.2)] scale-110"
                onError={(e) => {
-                 // Fallback: tentar .png ou esconder se não achar
                  const img = e.currentTarget;
                  if (img.src.includes('LOGO%20')) {
                    img.src = `/img/${teamData.teamName}.png`;
@@ -39,7 +45,6 @@ export function TeamBoard({ teamData, isWinning }: TeamBoardProps) {
              />
           </div>
 
-          {/* Foto do Líder */}
           <div className="relative">
             <img
               src={teamData.leader.photoUrl}
@@ -64,7 +69,6 @@ export function TeamBoard({ teamData, isWinning }: TeamBoardProps) {
             </h2>
             <div className="flex gap-2 items-center mt-1">
               <span className="text-zinc-500 text-[clamp(0.7rem,1.5vh,0.875rem)]">Vendas da Equipe</span>
-              {/* Vencedor Badge Animado */}
               <AnimatePresence>
                 {isWinning && (
                   <motion.div
@@ -82,19 +86,37 @@ export function TeamBoard({ teamData, isWinning }: TeamBoardProps) {
           </div>
         </div>
 
-        {/* Total Board */}
+        {/* Info Board (Total) */}
         <div className="flex flex-col items-end justify-center">
-          <span className="text-[clamp(1.5rem,5vh,3rem)] leading-none font-mono font-bold tracking-tighter text-white">
+          <span className="text-[clamp(0.6rem,1vh,0.75rem)] uppercase font-black tracking-widest text-emerald-500 mb-1">
+            Venda Total
+          </span>
+          <span className="text-[clamp(1.5rem,5vh,3.5rem)] leading-none font-mono font-bold tracking-tighter text-white">
             {formattedTotal}
           </span>
         </div>
       </div>
 
       {/* Sellers List */}
-      <div className="flex-1 min-h-0 flex flex-col gap-[clamp(0.25rem,1vh,0.75rem)]">
+      <div className="flex-1 flex flex-col justify-between min-h-0">
+        {/* Header de Colunas para Alinhamento estilo Tabela */}
+        <div className="hidden lg:flex items-center px-4 lg:px-6 mb-1 text-zinc-500 font-black uppercase tracking-widest text-[0.7rem]">
+           <div className="flex-1 flex justify-center pl-32 text-zinc-400">
+             Meta Semanal: <span className="ml-1 text-zinc-300">{formattedWeeklyGoal}</span>
+           </div> 
+           <div className="w-32 lg:w-44 text-center">Venda Diária</div>
+           <div className="w-24 lg:w-32 text-right">Falta</div>
+        </div>
+
         {/* Usamos layout transitions da AnimatePresence pra quando a ordem do DOM mudar */}
         {teamData.sellers.map((seller, idx) => (
-          <SellerCard key={seller.name} seller={seller} index={idx} />
+          <SellerCard 
+            key={seller.name} 
+            seller={seller} 
+            index={idx} 
+            dailyGoal={dailyGoal}
+            weeklyGoal={weeklyGoal}
+          />
         ))}
         {teamData.sellers.length === 0 && (
           <div className="text-zinc-600 text-center text-sm py-4">Nenhum vendedor encontrado</div>
