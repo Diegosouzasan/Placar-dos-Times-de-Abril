@@ -167,11 +167,10 @@ export default function Controller() {
   // --- SETTINGS HANDLERS ---
   async function handleUpdateGlobalGoal(type: 'daily' | 'weekly', val: string) {
     const numericValue = sanitizeNumber(val);
-    setIsUpdatingSettings(true);
     try {
       await updateSettings(type === 'daily' ? { daily_goal: numericValue } : { weekly_goal: numericValue });
     } finally {
-      setIsUpdatingSettings(false);
+      // Configurações atualizadas
     }
   }
 
