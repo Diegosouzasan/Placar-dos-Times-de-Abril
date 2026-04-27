@@ -72,7 +72,7 @@ export function MetaCelebration({ seller, onFinished }: MetaCelebrationProps) {
         >
           <video
             ref={videoRef}
-            src={videoUrl}
+            src={videoUrl ?? undefined}
             onEnded={handleVideoEnded}
             onCanPlay={(e) => {
               e.currentTarget.style.display = 'block';

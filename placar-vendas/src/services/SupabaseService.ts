@@ -101,8 +101,8 @@ export async function fetchPlacarData(category: string): Promise<DashboardData> 
   // Calculate winning team
   let winningTeam: TeamName | null = null;
   if (teams.length >= 2) {
-    if (teams[0].totalSales > teams[1].totalSales) winningTeam = teams[0].teamName;
-    else if (teams[1].totalSales > teams[0].totalSales) winningTeam = teams[1].teamName;
+    if (teams[0].totalSales > teams[1].totalSales) winningTeam = teams[0].teamName as TeamName;
+    else if (teams[1].totalSales > teams[0].totalSales) winningTeam = teams[1].teamName as TeamName;
   }
 
   return { teams, winningTeam, settings: settingsData };
