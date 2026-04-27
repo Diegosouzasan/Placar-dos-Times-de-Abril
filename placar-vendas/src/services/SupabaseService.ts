@@ -12,7 +12,8 @@ export interface RankedSeller {
 
 export interface TeamData {
   id: number;
-  teamName: TeamName;
+  teamName: string;
+  category: string;
   leader: {
     name: string;
     photoUrl: string;
@@ -39,11 +40,12 @@ export interface PlacarSettings {
   is_overlay_active: boolean;
 }
 
-export async function fetchPlacarData(): Promise<DashboardData> {
-  // 1. Fetch Teams
+export async function fetchPlacarData(category: string): Promise<DashboardData> {
+  // 1. Fetch Teams for this category
   const { data: teamsData, error: teamsError } = await supabase
     .from("teams")
     .select("*")
+    .eq("category", category)
     .order("id", { ascending: true });
 
   if (teamsError) throw teamsError;
@@ -56,11 +58,14 @@ export async function fetchPlacarData(): Promise<DashboardData> {
 
   if (sellersError) throw sellersError;
 
-  // 3. Fetch Settings
+  // 3. Fetch Settings for this category
   const { data: settingsData } = await supabase
     .from("placar_settings")
     .select("*")
+    .eq("category", category)
     .single();
+
+  console.log(`[DEBUG] fetchPlacarData category=${category} -> settings:`, settingsData);
 
   // 4. Assemble Dashboard Data
   const teams: TeamData[] = teamsData.map((t: any) => {
@@ -80,7 +85,8 @@ export async function fetchPlacarData(): Promise<DashboardData> {
 
     return {
       id: t.id,
-      teamName: t.name as TeamName,
+      teamName: t.name,
+      category: t.category,
       leader: {
         name: t.leader_name,
         photoUrl: t.leader_photo
@@ -103,40 +109,68 @@ export async function fetchPlacarData(): Promise<DashboardData> {
 }
 
 // Settings and Meta Actions
-export async function updateSettings(settings: Partial<PlacarSettings>) {
+export async function updateSettings(category: string, settings: Partial<PlacarSettings>) {
   const { error } = await supabase
     .from("placar_settings")
     .update(settings)
-    .eq("id", 1);
+    .eq("category", category);
   if (error) throw error;
 }
 
-export async function finalizeWeeklyMeta() {
-  // Reset all weekly_sales and total_sales to 0
+export async function updateTeam(teamId: number, data: { name?: string, leader_name?: string, leader_photo?: string }) {
   const { error } = await supabase
-    .from("sellers")
-    .update({ 
-      total_sales: 0,
-      weekly_sales: 0 
-    })
-    .neq("id", 0);
-  
+    .from("teams")
+    .update(data)
+    .eq("id", teamId);
   if (error) throw error;
-
-  // Deactivate meta
-  await updateSettings({ is_meta_active: false });
 }
 
-export async function resetDailySales() {
-  // Reset ONLY total_sales to 0, keeping weekly_sales intact
-  const { error } = await supabase
-    .from("sellers")
-    .update({ 
-      total_sales: 0
-    })
-    .neq("id", 0);
+export async function finalizeWeeklyMeta(category: string) {
+  // 1. Get teams of this category
+  const { data: teams } = await supabase
+    .from("teams")
+    .select("id")
+    .eq("category", category);
   
-  if (error) throw error;
+  const teamIds = teams?.map(t => t.id) || [];
+
+  if (teamIds.length > 0) {
+    // 2. Reset all weekly_sales and total_sales for these teams
+    const { error } = await supabase
+      .from("sellers")
+      .update({ 
+        total_sales: 0,
+        weekly_sales: 0 
+      })
+      .in("team_id", teamIds);
+    
+    if (error) throw error;
+  }
+
+  // 3. Deactivate meta for this category
+  await updateSettings(category, { is_meta_active: false });
+}
+
+export async function resetDailySales(category: string) {
+  // 1. Get teams of this category
+  const { data: teams } = await supabase
+    .from("teams")
+    .select("id")
+    .eq("category", category);
+  
+  const teamIds = teams?.map(t => t.id) || [];
+
+  if (teamIds.length > 0) {
+    // 2. Reset ONLY total_sales to 0 for these teams
+    const { error } = await supabase
+      .from("sellers")
+      .update({ 
+        total_sales: 0
+      })
+      .in("team_id", teamIds);
+    
+    if (error) throw error;
+  }
 }
 
 // Control Actions

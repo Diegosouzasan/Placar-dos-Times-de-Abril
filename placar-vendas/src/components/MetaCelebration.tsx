@@ -9,25 +9,34 @@ interface MetaCelebrationProps {
 
 export function MetaCelebration({ seller, onFinished }: MetaCelebrationProps) {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [videoUrl, setVideoUrl] = useState<string>("");
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const fallbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (seller) {
       setIsPlaying(true);
-      setVideoUrl(`/videos/${encodeURIComponent(seller.name)}.mp4`);
+      const name = encodeURIComponent(seller.name);
+      setVideoUrl(`/videos/${name}.mp4`);
+
+      // Iniciar áudio de vitória
+      if (!audioRef.current) {
+        audioRef.current = new Audio('/audio/victory.mp3');
+      }
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(e => console.warn("Erro ao tocar áudio de vitória:", e));
 
       if (fallbackTimeoutRef.current) clearTimeout(fallbackTimeoutRef.current);
       fallbackTimeoutRef.current = setTimeout(() => {
-         console.warn(`[EMERGÊNCIA] O vídeo travou no primeiro frame e não iniciou após 15s.`);
+         console.warn(`[EMERGÊNCIA] O vídeo travou ou não carregou após 15s.`);
          handleVideoEnded();
       }, 15000);
 
     } else {
       setIsPlaying(false);
-      setVideoUrl("");
+      setVideoUrl(null);
     }
     
     return () => {
@@ -37,6 +46,11 @@ export function MetaCelebration({ seller, onFinished }: MetaCelebrationProps) {
 
   const handleVideoEnded = () => {
     setIsPlaying(false);
+    setVideoUrl(null);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
     onFinished();
   };
   
@@ -69,14 +83,18 @@ export function MetaCelebration({ seller, onFinished }: MetaCelebrationProps) {
             }}
             onError={(e) => {
               const video = e.currentTarget;
-              const fallbackUrl = "/videos/padrao.mp4";
+              const currentSrc = video.src.toLowerCase();
               
-              if (!video.src.includes(fallbackUrl)) {
-                video.src = fallbackUrl;
-                video.load();
+              if (currentSrc.endsWith('.mp4')) {
+                video.src = video.src.replace('.mp4', '.mov');
+              } else if (currentSrc.endsWith('.mov')) {
+                video.src = video.src.replace('.mov', '.webm');
+              } else if (!currentSrc.includes('padrao.mp4')) {
+                video.src = "/videos/padrao.mp4";
               } else {
                 handleVideoEnded();
               }
+              video.load();
             }}
             className="absolute inset-0 w-full h-full object-cover"
             playsInline

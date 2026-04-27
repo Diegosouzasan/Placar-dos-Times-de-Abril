@@ -11,12 +11,17 @@ import {
   finalizeWeeklyMeta,
   resetDailySales,
   uploadFile,
+  updateTeam,
   type DashboardData,
   type TeamData
 } from '../services/SupabaseService';
-import { Plus, Trash2, Users, ArrowLeftRight, Save, X, Zap, Monitor, CheckCircle2, RotateCcw, Upload, Image as ImageIcon } from 'lucide-react';
+import { Plus, Trash2, Users, ArrowLeftRight, Save, X, Zap, Monitor, CheckCircle2, RotateCcw, Upload, Image as ImageIcon, ChevronLeft, Edit3 } from 'lucide-react';
 
-export default function Controller() {
+interface ControllerProps {
+  category: 'INSS' | 'CLT';
+}
+
+export default function Controller({ category }: ControllerProps) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingSeller, setEditingSeller] = useState<number | null>(null);
@@ -29,9 +34,9 @@ export default function Controller() {
   useEffect(() => {
     loadData();
 
-    // Configurar Realtime
+    // Configurar Realtime filtrado por categoria
     const channel = supabase
-      .channel('controller-realtime')
+      .channel(`controller-realtime-${category}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sellers' }, async () => {
         await loadData();
       })
@@ -46,11 +51,11 @@ export default function Controller() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [category]);
 
   async function loadData() {
     try {
-      const dashboardData = await fetchPlacarData();
+      const dashboardData = await fetchPlacarData(category);
       if (dashboardData) {
         setData(dashboardData);
       }
@@ -168,28 +173,44 @@ export default function Controller() {
   async function handleUpdateGlobalGoal(type: 'daily' | 'weekly', val: string) {
     const numericValue = sanitizeNumber(val);
     try {
-      await updateSettings(type === 'daily' ? { daily_goal: numericValue } : { weekly_goal: numericValue });
+      await updateSettings(category, type === 'daily' ? { daily_goal: numericValue } : { weekly_goal: numericValue });
+      await loadData();
+    } catch (error) {
+      console.error("Erro ao atualizar meta global:", error);
+    }
+  }
+
+  async function handleUpdateTeamDetails(teamId: number, data: { name?: string, leader_name?: string, leader_photo?: string }) {
+    await updateTeam(teamId, data);
+    await loadData();
+  }
+
+  async function handleFileUploadTeam(teamId: number, file: File, field: 'leader_photo') {
+    setIsUploading(true);
+    try {
+      const url = await uploadFile(file, 'teams');
+      await handleUpdateTeamDetails(teamId, { [field]: url });
     } finally {
-      // Configurações atualizadas
+      setIsUploading(false);
     }
   }
 
   async function handleToggleMetaStatus() {
     if (!data?.settings) return;
     const nextStatus = !data.settings.is_meta_active;
-    await updateSettings({ is_meta_active: nextStatus });
+    await updateSettings(category, { is_meta_active: nextStatus });
   }
 
   async function handleFinalizeMeta() {
     if (confirm("ATENÇÃO: Ao finalizar a meta, todos os valores de vendas (diários e semanais) serão ZERADOS. Deseja continuar?")) {
-      await finalizeWeeklyMeta();
+      await finalizeWeeklyMeta(category);
       await loadData();
     }
   }
 
   async function handleResetDaily() {
     if (confirm("Deseja realmente ZERAR apenas as vendas diárias? Os valores semanais serão mantidos.")) {
-      await resetDailySales();
+      await resetDailySales(category);
       await loadData();
     }
   }
@@ -203,12 +224,13 @@ export default function Controller() {
     } else {
       newDays = [...currentDays, day];
     }
-    await updateSettings({ meta_days: newDays.join(',') });
+    await updateSettings(category, { meta_days: newDays.join(',') });
   }
 
   async function handleUpdateOverlay(url: string) {
     try {
-      await updateSettings({ overlay_url: url });
+      await updateSettings(category, { overlay_url: url });
+      await loadData();
     } catch (error) {
       console.error("Erro ao atualizar overlay:", error);
     }
@@ -231,7 +253,7 @@ export default function Controller() {
   async function handleToggleOverlay() {
     if (!data?.settings) return;
     try {
-       await updateSettings({ is_overlay_active: !data.settings.is_overlay_active });
+       await updateSettings(category, { is_overlay_active: !data.settings.is_overlay_active });
     } catch (error) {
        console.error("Erro ao alternar overlay:", error);
     }
@@ -244,11 +266,19 @@ export default function Controller() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4 md:p-8 font-sans">
-      <header className="max-w-6xl mx-auto mb-10 text-center">
-        <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent mb-2">
-          Controller Placar
-        </h1>
-        <p className="text-gray-400">Gerenciamento de Vendas e Equipes - Super Update</p>
+      <header className="max-w-6xl mx-auto mb-10 relative">
+        <button 
+          onClick={() => window.location.hash = `#/${category.toLowerCase()}`}
+          className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center gap-2 text-zinc-500 hover:text-white transition-colors font-bold uppercase tracking-widest text-xs"
+        >
+          <ChevronLeft className="w-4 h-4" /> Voltar ao Placar
+        </button>
+        <div className="text-center">
+          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-emerald-500 to-teal-500 bg-clip-text text-transparent mb-2">
+            Controle {category}
+          </h1>
+          <p className="text-gray-400">Gerenciamento de Vendas e Equipes - {category}</p>
+        </div>
       </header>
 
       <div className="max-w-6xl mx-auto space-y-8">
@@ -367,8 +397,8 @@ export default function Controller() {
                        <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest pl-1">URL Atual</label>
                        <input 
                          type="text"
-                         value={data?.settings?.overlay_url || ""}
-                         onChange={(e) => handleUpdateOverlay(e.target.value)}
+                         defaultValue={data?.settings?.overlay_url || ""}
+                         onBlur={(e) => handleUpdateOverlay(e.target.value)}
                          className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-[10px] font-mono focus:border-blue-500/50 outline-none"
                          placeholder="Link do arquivo..."
                        />
@@ -436,19 +466,46 @@ export default function Controller() {
                 {/* Header do Time */}
                 <div className="flex items-center justify-between mb-8">
                   <div className="flex items-center gap-4">
-                    <img 
-                      src={team.leader.photoUrl} 
-                      alt={team.leader.name} 
-                      className="w-16 h-16 rounded-2xl border-2 border-blue-500/50 object-cover" 
-                      onError={(e) => {
-                        const img = e.currentTarget;
-                        if (img.src.includes('avatar')) return; // Evita loop
-                        img.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(team.leader.name)}&background=3b82f6&color=fff`;
-                      }}
-                    />
+                    <div className="relative group/photo">
+                      <img 
+                        src={team.leader.photoUrl} 
+                        alt={team.leader.name} 
+                        className="w-16 h-16 rounded-2xl border-2 border-emerald-500/50 object-cover group-hover/photo:opacity-50 transition-opacity" 
+                        onError={(e) => {
+                          const img = e.currentTarget;
+                          if (img.src.includes('avatar')) return;
+                          img.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(team.leader.name)}&background=10b981&color=fff`;
+                        }}
+                      />
+                      <label className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/photo:opacity-100 cursor-pointer transition-opacity">
+                        <Upload className="w-5 h-5 text-white" />
+                        <input 
+                          type="file" 
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => e.target.files?.[0] && handleFileUploadTeam(team.id, e.target.files[0], 'leader_photo')}
+                        />
+                      </label>
+                    </div>
                     <div>
-                      <h2 className="text-2xl font-black italic">{team.teamName}</h2>
-                      <p className="text-blue-400 text-sm font-bold uppercase tracking-wider">Líder: {team.leader.name}</p>
+                      <div className="flex items-center gap-2 group/title">
+                        <h2 className="text-2xl font-black italic">{team.teamName}</h2>
+                        <button className="opacity-0 group-hover/title:opacity-100 p-1 hover:text-emerald-400 transition-all">
+                          <Edit3 className="w-4 h-4" onClick={() => {
+                            const newName = prompt("Novo nome da equipe:", team.teamName);
+                            if (newName) handleUpdateTeamDetails(team.id, { name: newName });
+                          }} />
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2 group/leader">
+                        <p className="text-emerald-400 text-sm font-bold uppercase tracking-wider">Líder: {team.leader.name}</p>
+                        <button className="opacity-0 group-hover/leader:opacity-100 p-1 hover:text-white transition-all">
+                          <Edit3 className="w-3 h-3" onClick={() => {
+                            const newLeader = prompt("Novo nome do líder:", team.leader.name);
+                            if (newLeader) handleUpdateTeamDetails(team.id, { leader_name: newLeader });
+                          }} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                   

@@ -8,9 +8,10 @@ interface TeamBoardProps {
   isWinning: boolean;
   dailyGoal: number;
   weeklyGoal: number;
+  isSingleTeam?: boolean;
 }
 
-export function TeamBoard({ teamData, isWinning, dailyGoal, weeklyGoal }: TeamBoardProps) {
+export function TeamBoard({ teamData, isWinning, dailyGoal, weeklyGoal, isSingleTeam }: TeamBoardProps) {
   const formattedTotal = new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
@@ -100,24 +101,27 @@ export function TeamBoard({ teamData, isWinning, dailyGoal, weeklyGoal }: TeamBo
       {/* Sellers List */}
       <div className="flex-1 flex flex-col justify-between min-h-0">
         {/* Header de Colunas para Alinhamento estilo Tabela */}
-        <div className="hidden lg:flex items-center px-4 lg:px-6 mb-1 text-zinc-500 font-black uppercase tracking-widest text-[0.7rem]">
-           <div className="flex-1 flex justify-center pl-32 text-zinc-400">
-             Meta Semanal: <span className="ml-1 text-zinc-300">{formattedWeeklyGoal}</span>
-           </div> 
-           <div className="w-32 lg:w-44 text-center">Venda Diária</div>
-           <div className="w-24 lg:w-32 text-right">Falta</div>
-        </div>
+        {!isSingleTeam && (
+          <div className="hidden lg:flex items-center px-4 lg:px-6 mb-1 text-zinc-500 font-black uppercase tracking-widest text-[0.7rem]">
+            <div className="flex-1 flex justify-center pl-32 text-zinc-400">
+              Meta Semanal: <span className="ml-1 text-zinc-300">{formattedWeeklyGoal}</span>
+            </div> 
+            <div className="w-32 lg:w-44 text-center">Venda Diária</div>
+            <div className="w-24 lg:w-32 text-right">Falta</div>
+          </div>
+        )}
 
-        {/* Usamos layout transitions da AnimatePresence pra quando a ordem do DOM mudar */}
-        {teamData.sellers.map((seller, idx) => (
-          <SellerCard 
-            key={seller.name} 
-            seller={seller} 
-            index={idx} 
-            dailyGoal={dailyGoal}
-            weeklyGoal={weeklyGoal}
-          />
-        ))}
+        <div className={isSingleTeam ? "grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 h-full content-start" : "flex-1 flex flex-col justify-between"}>
+          {teamData.sellers.map((seller, idx) => (
+            <SellerCard 
+              key={seller.name} 
+              seller={seller} 
+              index={idx} 
+              dailyGoal={dailyGoal}
+              weeklyGoal={weeklyGoal}
+            />
+          ))}
+        </div>
         {teamData.sellers.length === 0 && (
           <div className="text-zinc-600 text-center text-sm py-4">Nenhum vendedor encontrado</div>
         )}

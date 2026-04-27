@@ -5,37 +5,48 @@ import { TeamBoard } from "./components/TeamBoard";
 import { MetaCelebration } from "./components/MetaCelebration";
 import { FloatingParticles } from "./components/FloatingParticles";
 import Controller from "./components/Controller";
+import { CategorySelection } from "./components/CategorySelection";
 import { motion, AnimatePresence } from "framer-motion";
 
 function App() {
+  const [category, setCategory] = useState<'INSS' | 'CLT' | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [data, setData] = useState<DashboardData>({ teams: [], winningTeam: null });
   const [celebratingSeller, setCelebratingSeller] = useState<RankedSeller | null>(null);
-  const [isAdmin, setIsAdmin] = useState(window.location.hash === "#/admin");
   
   const celebratedSellersRef = useRef<Set<number>>(new Set());
   const isFirstLoadRef = useRef(true);
 
-  const dailyGoal = data.settings?.daily_goal || 20000;
-  const weeklyGoal = data.settings?.weekly_goal || 100000;
-
-  // Escutar mudança de Hash para Navegação
+  // Parse hash routing
   useEffect(() => {
     const handleHashChange = () => {
-      setIsAdmin(window.location.hash === "#/admin");
+      const hash = window.location.hash;
+      if (hash.startsWith("#/inss")) {
+        setCategory('INSS');
+        setIsAdmin(hash.includes("/admin"));
+      } else if (hash.startsWith("#/clt")) {
+        setCategory('CLT');
+        setIsAdmin(hash.includes("/admin"));
+      } else {
+        setCategory(null);
+        setIsAdmin(false);
+      }
     };
+    
+    handleHashChange();
     window.addEventListener("hashchange", handleHashChange);
     return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
 
   // Busca inicial e Realtime
   useEffect(() => {
-    if (isAdmin) return;
+    if (!category || isAdmin) return;
 
     let channel: any;
 
     const init = async () => {
       try {
-        const initialData = await fetchPlacarData();
+        const initialData = await fetchPlacarData(category);
         setData(initialData);
         isFirstLoadRef.current = false;
       } catch (err) {
@@ -44,11 +55,10 @@ function App() {
 
       // Configurar Realtime
       channel = supabase
-        .channel('dashboard-realtime')
+        .channel(`dashboard-realtime-${category}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'sellers' }, async (payload: any) => {
-          const newData = await fetchPlacarData();
+          const newData = await fetchPlacarData(category);
           
-          // Lógica de Celebração
           if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
              const updatedSeller = payload.new;
              const currentDailyGoal = newData.settings?.daily_goal || 20000;
@@ -68,11 +78,11 @@ function App() {
           setData(newData);
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, async () => {
-          const newData = await fetchPlacarData();
+          const newData = await fetchPlacarData(category);
           setData(newData);
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'placar_settings' }, async () => {
-          const newData = await fetchPlacarData();
+          const newData = await fetchPlacarData(category);
           setData(newData);
         })
         .subscribe();
@@ -85,12 +95,18 @@ function App() {
         supabase.removeChannel(channel);
       }
     };
-  }, [isAdmin]);
+  }, [category, isAdmin]);
 
-  if (isAdmin) {
-    return <Controller />;
+  if (!category) {
+    return <CategorySelection onSelect={(cat) => window.location.hash = `#/${cat.toLowerCase()}`} />;
   }
 
+  if (isAdmin) {
+    return <Controller key={category} category={category} />;
+  }
+
+  const dailyGoal = data.settings?.daily_goal || 20000;
+  const weeklyGoal = data.settings?.weekly_goal || 100000;
   const isOverlayActive = data.settings?.is_overlay_active && data.settings?.overlay_url;
 
   return (
@@ -134,7 +150,9 @@ function App() {
 
       {/* BOLA COM BLUR DE FUNDO */}
       <motion.div
-        className="absolute top-[10%] left-[20%] w-[60vw] h-[60vw] max-w-[600px] max-h-[600px] rounded-full bg-emerald-500/20 blur-[120px] pointer-events-none"
+        className={`absolute top-[10%] left-[20%] w-[60vw] h-[60vw] max-w-[600px] max-h-[600px] rounded-full blur-[120px] pointer-events-none ${
+          category === 'INSS' ? 'bg-emerald-500/20' : 'bg-teal-500/20'
+        }`}
         animate={{
           x: ["0vw", "20vw", "-20vw", "10vw", "0vw"],
           y: ["0vh", "30vh", "10vh", "-20vh", "0vh"],
@@ -150,27 +168,39 @@ function App() {
       <FloatingParticles />
 
       {/* CABEÇALHO DO PLACAR */}
-      <div className="relative z-10 flex-shrink-0 flex justify-center mb-4 lg:mb-6 pt-2">
-        <h1 className="text-[clamp(2rem,6vh,4rem)] tracking-tighter uppercase font-black bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-teal-200 drop-shadow-sm leading-none">
-          Placar dos Times
+      <div className="relative z-10 flex-shrink-0 flex items-center justify-between mb-4 lg:mb-6 pt-2 px-4 lg:px-10">
+        <button 
+          onClick={() => window.location.hash = ""}
+          className="text-zinc-500 hover:text-white transition-colors flex items-center gap-2 font-bold uppercase tracking-widest text-xs"
+        >
+          ← Voltar
+        </button>
+        
+        <h1 className="text-[clamp(1.5rem,5vh,3.5rem)] tracking-tighter uppercase font-black bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-teal-200 drop-shadow-sm leading-none">
+          Placar {category}
         </h1>
+
+        <div className="w-20" /> {/* Spacer */}
       </div>
 
       {/* DASHBOARD GRID */}
-      <div className="relative z-10 flex-1 w-full mx-auto grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-8 min-h-0 pb-4">
+      <div className={`relative z-10 flex-1 w-full mx-auto grid gap-4 lg:gap-8 min-h-0 pb-4 ${
+        data.teams.length === 1 ? 'grid-cols-1 max-w-7xl' : 'grid-cols-1 lg:grid-cols-2'
+      }`}>
         {data.teams.map((team) => (
-          <div key={team.teamName} className="relative min-h-0 flex flex-col rounded-3xl overflow-hidden glass-panel">
+          <div key={team.id} className="relative min-h-0 flex flex-col rounded-[2.5rem] overflow-hidden glass-panel">
             <TeamBoard 
               teamData={team as any} 
-              isWinning={data.winningTeam === team.teamName} 
+              isWinning={data.winningTeam === team.teamName && data.teams.length > 1} 
               dailyGoal={dailyGoal}
               weeklyGoal={weeklyGoal}
+              isSingleTeam={data.teams.length === 1}
             />
           </div>
         ))}
         {data.teams.length === 0 && (
-          <div className="col-span-1 lg:col-span-2 text-center text-zinc-500 font-mono text-xl mt-20 animate-pulse">
-            Sincronizando com o Supabase...
+          <div className="col-span-full text-center text-zinc-500 font-mono text-xl mt-20 animate-pulse">
+            Sincronizando dados {category}...
           </div>
         )}
       </div>
@@ -190,9 +220,9 @@ function App() {
         />
       </div>
 
-      {/* BOTAO PARA ADMIN (Discreto) */}
+      {/* BOTAO PARA ADMIN */}
       <a 
-        href="#/admin" 
+        href={`#/${category.toLowerCase()}/admin`} 
         className="absolute bottom-4 right-4 z-30 p-2 bg-white/5 hover:bg-white/10 rounded-full opacity-20 hover:opacity-100 transition-opacity"
         title="Painel de Controle"
       >
