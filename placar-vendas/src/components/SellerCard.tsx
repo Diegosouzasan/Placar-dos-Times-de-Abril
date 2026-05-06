@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import clsx from "clsx";
 import type { RankedSeller } from "../services/SupabaseService";
 import { Coins } from "lucide-react";
+import { useEffect, useRef } from "react";
 
 interface SellerCardProps {
   seller: RankedSeller;
@@ -11,6 +12,15 @@ interface SellerCardProps {
 }
 
 export function SellerCard({ seller, index, dailyGoal, weeklyGoal }: SellerCardProps) {
+  const prevSalesRef = useRef(seller.sales);
+
+  useEffect(() => {
+    if (seller.sales > prevSalesRef.current) {
+      const audio = new Audio('/audio-cada-venda.mp3');
+      audio.play().catch(e => console.log('Audio play failed:', e));
+    }
+    prevSalesRef.current = seller.sales;
+  }, [seller.sales]);
   const formattedSales = new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",

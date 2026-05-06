@@ -30,6 +30,7 @@ export default function Controller({ category }: ControllerProps) {
   const [newSellerPhoto, setNewSellerPhoto] = useState<File | null>(null);
   const [selectedTeamForNewSeller, setSelectedTeamForNewSeller] = useState<number | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isCustomTv, setIsCustomTv] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -227,12 +228,22 @@ export default function Controller({ category }: ControllerProps) {
     await updateSettings(category, { meta_days: newDays.join(',') });
   }
 
-  async function handleUpdateOverlay(url: string) {
+  let overlayData = { media: [] as string[], index: 0, targetTv: "Todas", registeredTvs: [] as string[] };
+  try {
+    if (data?.settings?.overlay_url?.startsWith('{')) {
+       overlayData = { ...overlayData, ...JSON.parse(data.settings.overlay_url) };
+    } else if (data?.settings?.overlay_url) {
+       overlayData.media = [data.settings.overlay_url];
+    }
+  } catch(e) {}
+
+  async function saveOverlay(newData: Partial<typeof overlayData>) {
+    const updated = { ...overlayData, ...newData };
     try {
-      await updateSettings(category, { overlay_url: url });
+      await updateSettings(category, { overlay_url: JSON.stringify(updated) });
       await loadData();
     } catch (error) {
-      console.error("Erro ao atualizar overlay:", error);
+      console.error("Erro ao salvar overlay:", error);
     }
   }
 
@@ -240,8 +251,7 @@ export default function Controller({ category }: ControllerProps) {
     setIsUploading(true);
     try {
       const url = await uploadFile(file, 'overlays');
-      await handleUpdateOverlay(url);
-      await loadData();
+      await saveOverlay({ media: [...overlayData.media, url] });
     } catch (error) {
       console.error("Erro no upload:", error);
       alert("Erro ao carregar arquivo. Verifique se o bucket 'media' existe e é público.");
@@ -254,10 +264,45 @@ export default function Controller({ category }: ControllerProps) {
     if (!data?.settings) return;
     try {
        await updateSettings(category, { is_overlay_active: !data.settings.is_overlay_active });
+       await loadData();
     } catch (error) {
        console.error("Erro ao alternar overlay:", error);
     }
   }
+
+  function handleRemoveMedia(idx: number) {
+     const newMedia = [...overlayData.media];
+     newMedia.splice(idx, 1);
+     let newIndex = overlayData.index;
+     if (newIndex >= newMedia.length) newIndex = Math.max(0, newMedia.length - 1);
+     saveOverlay({ media: newMedia, index: newIndex });
+  }
+
+  function handleClearMedia() {
+     saveOverlay({ media: [], index: 0 });
+     if (data?.settings?.is_overlay_active) {
+        updateSettings(category, { is_overlay_active: false });
+     }
+  }
+  
+  useEffect(() => {
+    if (!data?.settings?.is_overlay_active || overlayData.media.length === 0) return;
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Impede múltiplas chamadas rápidas ou comportamento em inputs
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      
+      if (e.key === 'ArrowRight') {
+         const nextIdx = (overlayData.index + 1) % overlayData.media.length;
+         saveOverlay({ index: nextIdx });
+      } else if (e.key === 'ArrowLeft') {
+         const prevIdx = (overlayData.index - 1 + overlayData.media.length) % overlayData.media.length;
+         saveOverlay({ index: prevIdx });
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [data?.settings?.is_overlay_active, overlayData.media, overlayData.index]);
 
   if (loading) return <div className="flex items-center justify-center min-h-screen text-white bg-[#0a0a0a]">Carregando Controle...</div>;
   if (!data) return <div className="flex items-center justify-center min-h-screen text-white bg-[#0a0a0a]">Erro ao carregar dados. Tente atualizar a página.</div>;
@@ -363,7 +408,7 @@ export default function Controller({ category }: ControllerProps) {
            <div className="bg-[#151515] rounded-3xl p-6 border border-white/5 flex flex-col">
               <div className="flex items-center gap-2 mb-6">
                  <Monitor className="w-5 h-5 text-blue-400" />
-                 <h2 className="text-xl font-bold uppercase tracking-tight">Metas Avulsas</h2>
+                 <h2 className="text-xl font-bold uppercase tracking-tight">Metas Avulsas (Slides)</h2>
               </div>
               
               <div className="flex-1 space-y-4">
@@ -386,7 +431,7 @@ export default function Controller({ category }: ControllerProps) {
                                 <Upload className="w-6 h-6 text-gray-400 group-hover:text-blue-400" />
                              </div>
                              <div className="text-center">
-                                <p className="text-sm font-bold">Arraste ou Clique</p>
+                                <p className="text-sm font-bold">Adicionar Mídia (Slide)</p>
                                 <p className="text-[10px] text-gray-500">Imagem ou Vídeo (Upload Local)</p>
                              </div>
                           </>
@@ -394,65 +439,130 @@ export default function Controller({ category }: ControllerProps) {
                     </div>
 
                     <div className="space-y-2">
-                       <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest pl-1">URL Atual</label>
-                       <input 
-                         type="text"
-                         defaultValue={data?.settings?.overlay_url || ""}
-                         onBlur={(e) => handleUpdateOverlay(e.target.value)}
-                         className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-[10px] font-mono focus:border-blue-500/50 outline-none"
-                         placeholder="Link do arquivo..."
-                       />
+                       <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest pl-1">Selecionar TV Alvo</label>
+                       
+                       {!isCustomTv ? (
+                         <select
+                           value={overlayData.registeredTvs?.includes(overlayData.targetTv) || data?.teams.some(t => t.teamName === overlayData.targetTv) || overlayData.targetTv === "Todas" || overlayData.targetTv === "Todas as TVs" ? (overlayData.targetTv === "Todas" ? "Todas as TVs" : overlayData.targetTv) : (overlayData.targetTv ? "___CUSTOM___" : "Todas as TVs")}
+                           onChange={(e) => {
+                             if (e.target.value === "___CUSTOM___") {
+                               setIsCustomTv(true);
+                             } else {
+                               saveOverlay({ targetTv: e.target.value });
+                             }
+                           }}
+                           className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-sm focus:border-blue-500/50 outline-none"
+                         >
+                           <option value="Todas as TVs">Todas as TVs</option>
+                           <optgroup label="Times (Líderes)">
+                             {data?.teams.map(t => (
+                               <option key={`team-${t.id}`} value={t.teamName}>{t.teamName}</option>
+                             ))}
+                           </optgroup>
+                           {overlayData.registeredTvs && overlayData.registeredTvs.length > 0 && (
+                             <optgroup label="TVs/Grupos Cadastrados">
+                               {overlayData.registeredTvs.map((tv, i) => (
+                                 <option key={`reg-${i}`} value={tv}>{tv}</option>
+                               ))}
+                             </optgroup>
+                           )}
+                           <option value="___CUSTOM___">+ Digitar outro nome...</option>
+                         </select>
+                       ) : (
+                         <div className="flex gap-2">
+                           <input
+                             type="text"
+                             value={overlayData.targetTv === "Todas" ? "" : overlayData.targetTv}
+                             onChange={(e) => saveOverlay({ targetTv: e.target.value })}
+                             placeholder="Digite o nome exato da TV..."
+                             className="flex-1 bg-black/40 border border-blue-500/50 rounded-xl p-3 text-sm focus:border-blue-400 outline-none"
+                             autoFocus
+                           />
+                           <button 
+                             onClick={() => {
+                               setIsCustomTv(false);
+                               if (!overlayData.targetTv) saveOverlay({ targetTv: "Todas as TVs" });
+                             }}
+                             className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors"
+                             title="Voltar para lista"
+                           >
+                             <X className="w-5 h-5 text-gray-400" />
+                           </button>
+                         </div>
+                       )}
+                       <p className="text-[10px] text-gray-500 pl-1 mt-1">A apresentação só aparecerá em TVs configuradas com este exato nome.</p>
                     </div>
                  </div>
 
-                 {data?.settings?.overlay_url && (
-                    <div className="mb-4 rounded-xl overflow-hidden bg-black/40 border border-white/10 aspect-video relative group">
-                       {isVideo(data.settings.overlay_url) ? (
-                          <video 
-                            key={data.settings.overlay_url}
-                            src={data.settings.overlay_url} 
-                            muted 
-                            loop 
-                            autoPlay 
-                            playsInline
-                            className="w-full h-full object-cover"
-                          />
-                       ) : (
-                          <img 
-                            key={data.settings.overlay_url}
-                            src={data.settings.overlay_url} 
-                            alt="Preview" 
-                            className="w-full h-full object-cover"
-                          />
-                       )}
-                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-bottom p-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <span className="text-[10px] text-white/70 font-bold uppercase self-end">Pré-visualização</span>
-                       </div>
+                 {overlayData.media.length > 0 && (
+                    <div className="space-y-2 mb-4">
+                      <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest pl-1">
+                        Ordem dos Slides ({overlayData.index + 1} de {overlayData.media.length})
+                      </label>
+                      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
+                         {overlayData.media.map((url, idx) => (
+                           <div 
+                             key={idx} 
+                             onClick={() => saveOverlay({ index: idx })}
+                             className={`relative flex-shrink-0 w-24 h-24 rounded-xl overflow-hidden cursor-pointer border-2 transition-all group ${idx === overlayData.index ? 'border-blue-500 scale-105 shadow-[0_0_15px_rgba(59,130,246,0.5)] z-10' : 'border-white/10 hover:border-white/30'}`}
+                           >
+                             {isVideo(url) ? (
+                               <video src={url} className="w-full h-full object-cover" />
+                             ) : (
+                               <img src={url} className="w-full h-full object-cover" />
+                             )}
+                             <button 
+                               onClick={(e) => { e.stopPropagation(); handleRemoveMedia(idx); }}
+                               className="absolute top-1 right-1 bg-red-600/80 hover:bg-red-500 p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
+                             >
+                               <X className="w-3 h-3 text-white" />
+                             </button>
+                             <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                               <span className="text-[10px] font-bold text-white uppercase">Slide {idx + 1}</span>
+                             </div>
+                           </div>
+                         ))}
+                      </div>
+                      <p className="text-[10px] text-yellow-500/80 font-bold pl-1 uppercase tracking-wider flex items-center gap-1">
+                        <Zap className="w-3 h-3" />
+                        Use as setas ⬅️ ➡️ do teclado para passar os slides
+                      </p>
                     </div>
                  )}
 
-                 {data?.settings?.overlay_url && (
-                   <button 
-                     onClick={handleToggleOverlay}
-                     className={`w-full flex items-center justify-center gap-2 p-5 rounded-2xl font-black uppercase tracking-widest transition-all shadow-lg ${
-                       data?.settings?.is_overlay_active 
-                         ? 'bg-red-600 hover:bg-red-500 shadow-red-900/40' 
-                         : 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/40'
-                     }`}
-                   >
-                      {data?.settings?.is_overlay_active ? (
-                        <>
-                          <X className="w-5 h-5 text-white" />
-                          Desativar No Placar
-                        </>
-                      ) : (
-                        <>
-                          <Zap className="w-5 h-5 text-white" />
-                          Ativar No Placar
-                        </>
-                      )}
-                   </button>
-                 )}
+                 <div className="flex flex-col gap-2">
+                   {overlayData.media.length > 0 && (
+                     <button 
+                       onClick={handleToggleOverlay}
+                       className={`w-full flex items-center justify-center gap-2 p-4 rounded-2xl font-black uppercase tracking-widest transition-all shadow-lg ${
+                         data?.settings?.is_overlay_active 
+                           ? 'bg-red-600 hover:bg-red-500 shadow-red-900/40' 
+                           : 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/40'
+                       }`}
+                     >
+                        {data?.settings?.is_overlay_active ? (
+                          <>
+                            <X className="w-5 h-5 text-white" />
+                            Terminar Apresentação
+                          </>
+                        ) : (
+                          <>
+                            <Zap className="w-5 h-5 text-white" />
+                            Apresentar ({overlayData.targetTv})
+                          </>
+                        )}
+                     </button>
+                   )}
+                   {overlayData.media.length > 0 && (
+                     <button 
+                       onClick={handleClearMedia}
+                       className="w-full flex items-center justify-center gap-2 p-3 rounded-2xl bg-zinc-800 text-red-400 hover:bg-red-950/50 hover:text-red-300 font-bold text-sm uppercase transition-all border border-red-500/10"
+                     >
+                       <Trash2 className="w-4 h-4" />
+                       Limpar Metas Avulsas
+                     </button>
+                   )}
+                 </div>
               </div>
            </div>
         </div>
