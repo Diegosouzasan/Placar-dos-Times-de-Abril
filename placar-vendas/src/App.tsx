@@ -281,9 +281,6 @@ function App() {
     return <Controller key={category} category={category} />;
   }
 
-  const dailyGoal = data.settings?.daily_goal || 20000;
-  const weeklyGoal = data.settings?.weekly_goal || 100000;
-
 
   const targetTv = overlayData.targetTv || "Todas";
   const isTargetAll = targetTv === "Todas" || targetTv === "Todas as TVs" || targetTv === "";
