@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { 
   fetchPlacarData, 
@@ -15,7 +15,10 @@ import {
   type DashboardData,
   type TeamData
 } from '../services/SupabaseService';
-import { Plus, Trash2, Users, ArrowLeftRight, Save, X, Zap, Monitor, CheckCircle2, RotateCcw, Upload, Image as ImageIcon, ChevronLeft, Edit3 } from 'lucide-react';
+import { Plus, Trash2, Users, ArrowLeftRight, Save, X, Zap, Monitor, CheckCircle2, RotateCcw, Upload, Image as ImageIcon, ChevronLeft, Edit3, ChevronDown, Minus, BarChart } from 'lucide-react';
+import Reports from './Reports';
+
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface ControllerProps {
   category: 'INSS' | 'CLT';
@@ -31,6 +34,9 @@ export default function Controller({ category }: ControllerProps) {
   const [selectedTeamForNewSeller, setSelectedTeamForNewSeller] = useState<number | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isCustomTv, setIsCustomTv] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [editingSellerGoal, setEditingSellerGoal] = useState<number | null>(null);
+  const [showReports, setShowReports] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -228,7 +234,17 @@ export default function Controller({ category }: ControllerProps) {
     await updateSettings(category, { meta_days: newDays.join(',') });
   }
 
-  let overlayData = { media: [] as string[], index: 0, targetTv: "Todas", registeredTvs: [] as string[] };
+  let overlayData = { 
+    media: [] as string[], 
+    index: 0, 
+    targetTv: "Todas", 
+    registeredTvs: [] as string[],
+    activeTime: 1,
+    pauseTime: 15,
+    cycleStartTime: new Date().toISOString(),
+    teamGoals: {} as Record<number, { daily: number, weekly: number }>,
+    sellerGoals: {} as Record<number, number>
+  };
   try {
     if (data?.settings?.overlay_url?.startsWith('{')) {
        overlayData = { ...overlayData, ...JSON.parse(data.settings.overlay_url) };
@@ -239,6 +255,11 @@ export default function Controller({ category }: ControllerProps) {
 
   async function saveOverlay(newData: Partial<typeof overlayData>) {
     const updated = { ...overlayData, ...newData };
+    // Se o status de ativo mudar para true, resetamos o ciclo para começar agora
+    if (newData.cycleStartTime === undefined && !overlayData.cycleStartTime) {
+       updated.cycleStartTime = new Date().toISOString();
+    }
+
     try {
       await updateSettings(category, { overlay_url: JSON.stringify(updated) });
       await loadData();
@@ -263,7 +284,16 @@ export default function Controller({ category }: ControllerProps) {
   async function handleToggleOverlay() {
     if (!data?.settings) return;
     try {
-       await updateSettings(category, { is_overlay_active: !data.settings.is_overlay_active });
+       const nextStatus = !data.settings.is_overlay_active;
+       const updateData: any = { is_overlay_active: nextStatus };
+       
+       // Se estiver ligando, reseta o tempo de início para "agora"
+       if (nextStatus) {
+          const updatedOverlay = { ...overlayData, cycleStartTime: new Date().toISOString() };
+          updateData.overlay_url = JSON.stringify(updatedOverlay);
+       }
+       
+       await updateSettings(category, updateData);
        await loadData();
     } catch (error) {
        console.error("Erro ao alternar overlay:", error);
@@ -307,6 +337,10 @@ export default function Controller({ category }: ControllerProps) {
   if (loading) return <div className="flex items-center justify-center min-h-screen text-white bg-[#0a0a0a]">Carregando Controle...</div>;
   if (!data) return <div className="flex items-center justify-center min-h-screen text-white bg-[#0a0a0a]">Erro ao carregar dados. Tente atualizar a página.</div>;
 
+  if (showReports) {
+    return <Reports onBack={() => setShowReports(false)} />;
+  }
+
   const ALL_DAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
 
   return (
@@ -323,6 +357,14 @@ export default function Controller({ category }: ControllerProps) {
             Controle {category}
           </h1>
           <p className="text-gray-400">Gerenciamento de Vendas e Equipes - {category}</p>
+        </div>
+        <div className="absolute right-0 top-1/2 -translate-y-1/2 hidden md:block">
+          <button 
+            onClick={() => setShowReports(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-black font-black uppercase tracking-widest text-xs rounded-lg transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+          >
+            <BarChart className="w-4 h-4" /> Relatórios
+          </button>
         </div>
       </header>
 
@@ -438,59 +480,132 @@ export default function Controller({ category }: ControllerProps) {
                        )}
                     </div>
 
-                    <div className="space-y-2">
-                       <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest pl-1">Selecionar TV Alvo</label>
+                    <div className="space-y-2 relative">
+                       <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest pl-1">TV Alvo (Exibição)</label>
                        
                        {!isCustomTv ? (
-                         <select
-                           value={overlayData.registeredTvs?.includes(overlayData.targetTv) || data?.teams.some(t => t.teamName === overlayData.targetTv) || overlayData.targetTv === "Todas" || overlayData.targetTv === "Todas as TVs" ? (overlayData.targetTv === "Todas" ? "Todas as TVs" : overlayData.targetTv) : (overlayData.targetTv ? "___CUSTOM___" : "Todas as TVs")}
-                           onChange={(e) => {
-                             if (e.target.value === "___CUSTOM___") {
-                               setIsCustomTv(true);
-                             } else {
-                               saveOverlay({ targetTv: e.target.value });
-                             }
-                           }}
-                           className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-sm focus:border-blue-500/50 outline-none"
-                         >
-                           <option value="Todas as TVs">Todas as TVs</option>
-                           <optgroup label="Times (Líderes)">
-                             {data?.teams.map(t => (
-                               <option key={`team-${t.id}`} value={t.teamName}>{t.teamName}</option>
-                             ))}
-                           </optgroup>
-                           {overlayData.registeredTvs && overlayData.registeredTvs.length > 0 && (
-                             <optgroup label="TVs/Grupos Cadastrados">
-                               {overlayData.registeredTvs.map((tv, i) => (
-                                 <option key={`reg-${i}`} value={tv}>{tv}</option>
-                               ))}
-                             </optgroup>
-                           )}
-                           <option value="___CUSTOM___">+ Digitar outro nome...</option>
-                         </select>
-                       ) : (
-                         <div className="flex gap-2">
-                           <input
-                             type="text"
-                             value={overlayData.targetTv === "Todas" ? "" : overlayData.targetTv}
-                             onChange={(e) => saveOverlay({ targetTv: e.target.value })}
-                             placeholder="Digite o nome exato da TV..."
-                             className="flex-1 bg-black/40 border border-blue-500/50 rounded-xl p-3 text-sm focus:border-blue-400 outline-none"
-                             autoFocus
-                           />
-                           <button 
-                             onClick={() => {
-                               setIsCustomTv(false);
-                               if (!overlayData.targetTv) saveOverlay({ targetTv: "Todas as TVs" });
-                             }}
-                             className="p-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors"
-                             title="Voltar para lista"
-                           >
-                             <X className="w-5 h-5 text-gray-400" />
-                           </button>
+                         <div className="relative">
+                            <button
+                              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                              className="w-full bg-[#0d0d0d] border border-white/5 rounded-2xl p-4 flex items-center justify-between group hover:border-blue-500/30 transition-all duration-300 shadow-lg"
+                            >
+                               <div className="flex items-center gap-3">
+                                  <div className="p-2 bg-blue-500/10 rounded-xl group-hover:bg-blue-500/20 transition-colors">
+                                     {overlayData.targetTv === "Todas" || overlayData.targetTv === "Todas as TVs" ? (
+                                       <Monitor className="w-4 h-4 text-blue-400" />
+                                     ) : data?.teams.some(t => t.teamName === overlayData.targetTv) ? (
+                                       <Users className="w-4 h-4 text-emerald-400" />
+                                     ) : (
+                                       <Monitor className="w-4 h-4 text-zinc-400" />
+                                     )}
+                                  </div>
+                                  <div className="text-left">
+                                     <p className="text-[10px] text-gray-500 font-black uppercase tracking-tighter leading-none mb-1">Selecionado</p>
+                                     <p className="text-sm font-bold text-white truncate">
+                                        {overlayData.targetTv === "Todas" || overlayData.targetTv === "Todas as TVs" ? "Todas as TVs" : overlayData.targetTv || "Selecione um destino..."}
+                                     </p>
+                                  </div>
+                               </div>
+                               <ChevronDown className={`w-5 h-5 text-zinc-600 transition-transform duration-500 ${isDropdownOpen ? 'rotate-180 text-blue-400' : ''}`} />
+                            </button>
+
+                            <AnimatePresence>
+                               {isDropdownOpen && (
+                                 <>
+                                   <div className="fixed inset-0 z-40" onClick={() => setIsDropdownOpen(false)} />
+                                   <motion.div
+                                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                     animate={{ opacity: 1, y: 0, scale: 1 }}
+                                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                     className="absolute left-0 right-0 bottom-full mb-3 z-50 glass-panel border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden"
+                                   >
+                                      <div className="max-h-[320px] overflow-y-auto custom-scrollbar p-2 space-y-1">
+                                         {/* Opção Global */}
+                                         <button
+                                           onClick={() => { saveOverlay({ targetTv: "Todas as TVs" }); setIsDropdownOpen(false); }}
+                                           className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${overlayData.targetTv === "Todas as TVs" ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-white/5 text-gray-400'}`}
+                                         >
+                                            <Monitor className={`w-4 h-4 ${overlayData.targetTv === "Todas as TVs" ? 'text-white' : 'text-blue-400'}`} />
+                                            <span className="text-sm font-bold">Todas as TVs (Geral)</span>
+                                         </button>
+
+                                         {/* Seção de Times */}
+                                         <div className="pt-2">
+                                            <p className="px-4 py-1.5 text-[9px] font-black text-gray-600 uppercase tracking-[0.2em]">Equipes de Vendas</p>
+                                            {data?.teams.map(t => (
+                                              <button
+                                                key={`sel-team-${t.id}`}
+                                                onClick={() => { saveOverlay({ targetTv: t.teamName }); setIsDropdownOpen(false); }}
+                                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${overlayData.targetTv === t.teamName ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-white/5 text-gray-300'}`}
+                                              >
+                                                 <Users className={`w-4 h-4 ${overlayData.targetTv === t.teamName ? 'text-white' : 'text-emerald-400'}`} />
+                                                 <span className="text-sm font-medium">{t.teamName}</span>
+                                              </button>
+                                            ))}
+                                         </div>
+
+                                         {/* Seção de TVs Individuais */}
+                                         {overlayData.registeredTvs && overlayData.registeredTvs.length > 0 && (
+                                           <div className="pt-2">
+                                              <p className="px-4 py-1.5 text-[9px] font-black text-gray-600 uppercase tracking-[0.2em]">TVs / Dispositivos</p>
+                                              {overlayData.registeredTvs.map((tv, i) => (
+                                                <button
+                                                  key={`sel-reg-${i}`}
+                                                  onClick={() => { saveOverlay({ targetTv: tv }); setIsDropdownOpen(false); }}
+                                                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${overlayData.targetTv === tv ? 'bg-blue-500 text-white shadow-lg' : 'hover:bg-white/5 text-gray-300'}`}
+                                                >
+                                                   <Monitor className={`w-4 h-4 ${overlayData.targetTv === tv ? 'text-white' : 'text-blue-400'}`} />
+                                                   <span className="text-sm font-medium">{tv}</span>
+                                                </button>
+                                              ))}
+                                           </div>
+                                         )}
+
+                                         {/* Opção Customizada */}
+                                         <div className="pt-2 border-t border-white/5 mt-2">
+                                            <button
+                                              onClick={() => { setIsCustomTv(true); setIsDropdownOpen(false); }}
+                                              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-amber-500/10 text-amber-500 transition-all"
+                                            >
+                                               <Plus className="w-4 h-4" />
+                                               <span className="text-sm font-black uppercase tracking-wider">Digitar outro nome</span>
+                                            </button>
+                                         </div>
+                                      </div>
+                                   </motion.div>
+                                 </>
+                               )}
+                            </AnimatePresence>
                          </div>
+                       ) : (
+                         <motion.div 
+                           initial={{ opacity: 0, x: 20 }}
+                           animate={{ opacity: 1, x: 0 }}
+                           className="flex gap-2"
+                         >
+                            <div className="relative flex-1 group">
+                               <input
+                                 type="text"
+                                 value={overlayData.targetTv === "Todas" || overlayData.targetTv === "Todas as TVs" ? "" : overlayData.targetTv}
+                                 onChange={(e) => saveOverlay({ targetTv: e.target.value })}
+                                 placeholder="Digite o nome da TV alvo..."
+                                 className="w-full bg-[#0d0d0d] border border-amber-500/30 rounded-2xl p-4 text-sm focus:border-amber-500 outline-none text-amber-100 shadow-inner"
+                                 autoFocus
+                               />
+                               <div className="absolute right-4 top-1/2 -translate-y-1/2 text-amber-500/30 font-black text-[10px] uppercase tracking-widest group-focus-within:opacity-0 transition-opacity">Custom</div>
+                            </div>
+                            <button 
+                              onClick={() => {
+                                setIsCustomTv(false);
+                                if (!overlayData.targetTv || overlayData.targetTv === "") saveOverlay({ targetTv: "Todas as TVs" });
+                              }}
+                              className="px-6 bg-emerald-600 hover:bg-emerald-500 rounded-2xl transition-all shadow-lg flex items-center justify-center text-white"
+                            >
+                               <CheckCircle2 className="w-5 h-5" />
+                            </button>
+                         </motion.div>
                        )}
-                       <p className="text-[10px] text-gray-500 pl-1 mt-1">A apresentação só aparecerá em TVs configuradas com este exato nome.</p>
+                       <p className="text-[10px] text-gray-500 pl-1 mt-1 font-medium italic opacity-70">Define em qual grupo ou TV específica os slides serão exibidos agora.</p>
                     </div>
                  </div>
 
@@ -528,6 +643,64 @@ export default function Controller({ category }: ControllerProps) {
                         Use as setas ⬅️ ➡️ do teclado para passar os slides
                       </p>
                     </div>
+                 )}
+
+                 {/* CONTROLE DE TEMPO (ATIVO / PAUSA) */}
+                 {overlayData.media.length > 0 && (
+                   <div className="grid grid-cols-2 gap-3 mb-4">
+                      <div className="space-y-1.5">
+                         <label className="text-[9px] text-gray-500 font-black uppercase tracking-widest pl-1 flex items-center gap-1">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500" /> Ativo (Min)
+                         </label>
+                         <div className="flex items-center bg-black/40 border border-white/5 rounded-xl overflow-hidden group focus-within:border-emerald-500/50 transition-all">
+                            <button 
+                              onClick={() => saveOverlay({ activeTime: Math.max(1, (overlayData.activeTime || 1) - 1) })}
+                              className="p-3 hover:bg-white/5 text-zinc-600 hover:text-emerald-400 transition-colors"
+                            >
+                              <Minus className="w-3.5 h-3.5" />
+                            </button>
+                            <input 
+                              type="number"
+                              min="1"
+                              value={overlayData.activeTime || 1}
+                              onChange={(e) => saveOverlay({ activeTime: parseInt(e.target.value) || 1 })}
+                              className="w-full bg-transparent border-none p-3 text-sm font-bold text-emerald-400 text-center outline-none"
+                            />
+                            <button 
+                              onClick={() => saveOverlay({ activeTime: (overlayData.activeTime || 1) + 1 })}
+                              className="p-3 hover:bg-white/5 text-zinc-600 hover:text-emerald-400 transition-colors"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                         </div>
+                      </div>
+                      <div className="space-y-1.5">
+                         <label className="text-[9px] text-gray-500 font-black uppercase tracking-widest pl-1 flex items-center gap-1">
+                            <X className="w-2.5 h-2.5 text-red-500" /> Pausa (Min)
+                         </label>
+                         <div className="flex items-center bg-black/40 border border-white/5 rounded-xl overflow-hidden group focus-within:border-blue-500/50 transition-all">
+                            <button 
+                              onClick={() => saveOverlay({ pauseTime: Math.max(0, (overlayData.pauseTime || 0) - 1) })}
+                              className="p-3 hover:bg-white/5 text-zinc-600 hover:text-blue-400 transition-colors"
+                            >
+                              <Minus className="w-3.5 h-3.5" />
+                            </button>
+                            <input 
+                              type="number"
+                              min="0"
+                              value={overlayData.pauseTime || 0}
+                              onChange={(e) => saveOverlay({ pauseTime: parseInt(e.target.value) || 0 })}
+                              className="w-full bg-transparent border-none p-3 text-sm font-bold text-zinc-400 text-center outline-none"
+                            />
+                            <button 
+                              onClick={() => saveOverlay({ pauseTime: (overlayData.pauseTime || 0) + 1 })}
+                              className="p-3 hover:bg-white/5 text-zinc-600 hover:text-blue-400 transition-colors"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                         </div>
+                      </div>
+                   </div>
                  )}
 
                  <div className="flex flex-col gap-2">
@@ -619,11 +792,53 @@ export default function Controller({ category }: ControllerProps) {
                     </div>
                   </div>
                   
-                  <div className="flex flex-col items-end gap-2">
-                     <span className="text-[10px] text-gray-500 font-bold uppercase">Modo Geral</span>
-                     <button onClick={() => handleToggleMode(team)} className={`w-12 h-6 rounded-full p-1 transition-colors ${team.isManualMode ? 'bg-blue-600' : 'bg-gray-700'}`} >
-                       <div className={`w-4 h-4 bg-white rounded-full transition-transform ${team.isManualMode ? 'translate-x-6' : ''}`} />
-                     </button>
+                  <div className="flex flex-col items-end gap-3">
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="text-[10px] text-gray-500 font-bold uppercase">Modo Geral</span>
+                      <button onClick={() => handleToggleMode(team)} className={`w-12 h-6 rounded-full p-1 transition-colors ${team.isManualMode ? 'bg-blue-600' : 'bg-gray-700'}`} >
+                        <div className={`w-4 h-4 bg-white rounded-full transition-transform ${team.isManualMode ? 'translate-x-6' : ''}`} />
+                      </button>
+                    </div>
+                    
+                    {/* METAS INDIVIDUAIS DO TIME */}
+                    <div className="flex gap-3">
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="text-[9px] text-emerald-500/70 font-black uppercase tracking-widest">Meta Diária</span>
+                        <div className="flex items-center bg-black/40 border border-white/5 rounded-lg overflow-hidden h-8">
+                          <input 
+                            type="number"
+                            value={overlayData.teamGoals?.[team.id]?.daily ?? data?.settings?.daily_goal ?? 20000}
+                            onChange={(e) => {
+                              const newGoals = { ...(overlayData.teamGoals || {}) };
+                              newGoals[team.id] = { 
+                                ...(newGoals[team.id] || { weekly: data?.settings?.weekly_goal || 100000 }), 
+                                daily: parseInt(e.target.value) || 0 
+                              };
+                              saveOverlay({ teamGoals: newGoals });
+                            }}
+                            className="w-16 bg-transparent border-none px-2 text-[11px] font-bold text-emerald-400 text-right outline-none"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="text-[9px] text-blue-500/70 font-black uppercase tracking-widest">Meta Semanal</span>
+                        <div className="flex items-center bg-black/40 border border-white/5 rounded-lg overflow-hidden h-8">
+                          <input 
+                            type="number"
+                            value={overlayData.teamGoals?.[team.id]?.weekly ?? data?.settings?.weekly_goal ?? 100000}
+                            onChange={(e) => {
+                              const newGoals = { ...(overlayData.teamGoals || {}) };
+                              newGoals[team.id] = { 
+                                ...(newGoals[team.id] || { daily: data?.settings?.daily_goal || 20000 }), 
+                                weekly: parseInt(e.target.value) || 0 
+                              };
+                              saveOverlay({ teamGoals: newGoals });
+                            }}
+                            className="w-20 bg-transparent border-none px-2 text-[11px] font-bold text-blue-400 text-right outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -676,6 +891,42 @@ export default function Controller({ category }: ControllerProps) {
                             </div>
                          ) : (
                            <>
+                               {editingSellerGoal === seller.id ? (
+                                 <input 
+                                   type="number"
+                                   autoFocus
+                                   placeholder="Meta"
+                                   defaultValue={overlayData.sellerGoals?.[seller.id] || ""}
+                                   onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                         const val = (e.target as HTMLInputElement).value;
+                                         const newGoals = { ...(overlayData.sellerGoals || {}) };
+                                         if (val && parseInt(val) > 0) newGoals[seller.id] = parseInt(val);
+                                         else delete newGoals[seller.id];
+                                         saveOverlay({ sellerGoals: newGoals });
+                                         setEditingSellerGoal(null);
+                                      }
+                                      if (e.key === 'Escape') setEditingSellerGoal(null);
+                                   }}
+                                   onBlur={(e) => {
+                                      const val = e.target.value;
+                                      const newGoals = { ...(overlayData.sellerGoals || {}) };
+                                      if (val && parseInt(val) > 0) newGoals[seller.id] = parseInt(val);
+                                      else delete newGoals[seller.id];
+                                      saveOverlay({ sellerGoals: newGoals });
+                                      setEditingSellerGoal(null);
+                                   }}
+                                   className="w-20 bg-yellow-500/10 border border-yellow-500/50 rounded-lg p-1 text-xs font-bold text-yellow-500 outline-none text-right"
+                                 />
+                               ) : (
+                                 <button 
+                                   onClick={() => setEditingSellerGoal(seller.id)} 
+                                   className={`p-2 rounded-xl transition-all ${overlayData.sellerGoals?.[seller.id] ? 'bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30' : 'hover:bg-white/5 text-zinc-500'}`}
+                                   title="Definir Meta Individual"
+                                 >
+                                    <span className="text-[10px] font-black">{overlayData.sellerGoals?.[seller.id] ? `${(overlayData.sellerGoals[seller.id]/1000).toFixed(0)}k` : 'Meta'}</span>
+                                 </button>
+                               )}
                               <button onClick={() => { setEditingSeller(seller.id); setNewValue(seller.sales > 0 ? seller.sales.toString() : ""); }} className="p-2 hover:bg-white/5 rounded-xl text-blue-400 transition-opacity" ><Plus className="w-4 h-4" /></button>
                               <button onClick={() => otherTeam && handleMoveSeller(seller.id, team.id, otherTeam.id)} className="p-2 hover:bg-white/5 rounded-xl text-yellow-400 transition-opacity" ><ArrowLeftRight className="w-4 h-4" /></button>
                               <button onClick={() => handleDeleteSeller(seller.id)} className="p-2 hover:bg-white/5 rounded-xl text-red-500 transition-opacity" ><Trash2 className="w-4 h-4" /></button>

@@ -8,6 +8,7 @@ export interface RankedSeller {
   sales: number;
   weeklySales: number;
   photoUrl: string;
+  dailyGoal?: number; // Meta individual opcional
 }
 
 export interface TeamData {
@@ -21,6 +22,8 @@ export interface TeamData {
   totalSales: number;
   isManualMode: boolean;
   manualTotal: number;
+  dailyGoal: number;
+  weeklyGoal: number;
   sellers: RankedSeller[];
 }
 
@@ -65,23 +68,46 @@ export async function fetchPlacarData(category: string): Promise<DashboardData> 
     .eq("category", category)
     .single();
 
-  console.log(`[DEBUG] fetchPlacarData category=${category} -> settings:`, settingsData);
+  // Parse overlay data once to use for teams and sellers
+  let overlayData: any = {};
+  try {
+    if (settingsData?.overlay_url?.startsWith('{')) {
+      overlayData = JSON.parse(settingsData.overlay_url);
+    }
+  } catch (e) {
+    console.error("Error parsing overlay_url", e);
+  }
 
   // 4. Assemble Dashboard Data
   const teams: TeamData[] = teamsData.map((t: any) => {
     const teamSellers = sellersData
       .filter((s: any) => s.team_id === t.id)
-      .map((s: any) => ({
-        id: s.id,
-        name: s.name,
-        team: t.name as TeamName,
-        sales: Number(s.total_sales),
-        weeklySales: Number(s.weekly_sales || 0),
-        photoUrl: s.photo_url || `/img/${encodeURIComponent(s.name.split(" ")[0])}.png`
-      }));
+      .map((s: any) => {
+        // Parse individual seller goal
+        const individualGoal = overlayData.sellerGoals?.[s.id];
+        
+        return {
+          id: s.id,
+          name: s.name,
+          team: t.name as TeamName,
+          sales: Number(s.total_sales),
+          weeklySales: Number(s.weekly_sales || 0),
+          photoUrl: s.photo_url || `/img/${encodeURIComponent(s.name.split(" ")[0])}.png`,
+          dailyGoal: individualGoal ? Number(individualGoal) : undefined
+        };
+      });
 
     const individualTotal = teamSellers.reduce((sum, s) => sum + s.sales, 0);
     const totalSales = t.is_manual_mode ? Number(t.manual_total) : individualTotal;
+
+    // Parse team goals from overlay_url
+    let teamDailyGoal = settingsData?.daily_goal || 20000;
+    let teamWeeklyGoal = settingsData?.weekly_goal || 100000;
+    
+    if (overlayData.teamGoals?.[t.id]) {
+      teamDailyGoal = overlayData.teamGoals[t.id].daily || teamDailyGoal;
+      teamWeeklyGoal = overlayData.teamGoals[t.id].weekly || teamWeeklyGoal;
+    }
 
     return {
       id: t.id,
@@ -94,6 +120,8 @@ export async function fetchPlacarData(category: string): Promise<DashboardData> 
       totalSales,
       isManualMode: t.is_manual_mode,
       manualTotal: Number(t.manual_total),
+      dailyGoal: teamDailyGoal,
+      weeklyGoal: teamWeeklyGoal,
       sellers: teamSellers
     };
   });
@@ -201,6 +229,15 @@ export async function updateSellerSales(sellerId: number, newDaySales: number) {
     .eq("id", sellerId);
 
   if (error) throw error;
+
+  // Insert to sales_history if there is a difference
+  if (diff !== 0) {
+    await supabase.from("sales_history").insert({
+      seller_id: sellerId,
+      amount: diff,
+      created_at: new Date().toISOString()
+    });
+  }
 }
 
 export async function toggleTeamMode(teamId: number, isManual: boolean, manualTotal: number) {
@@ -259,4 +296,37 @@ export async function uploadFile(file: File, path: string, bucket: string = "med
     .getPublicUrl(filePath);
 
   return data.publicUrl;
+}
+
+// Relatórios
+export async function fetchSalesHistory(startDate?: string, endDate?: string) {
+  let query = supabase
+    .from("sales_history")
+    .select("*")
+    .order('created_at', { ascending: false });
+
+  if (startDate) {
+    query = query.gte('created_at', `${startDate}T00:00:00.000Z`);
+  }
+  if (endDate) {
+    query = query.lte('created_at', `${endDate}T23:59:59.999Z`);
+  }
+    
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+}
+
+export async function resetSalesHistory() {
+  const { error } = await supabase
+    .from("sales_history")
+    .delete()
+    .neq("id", 0); // Delete all
+  if (error) throw error;
+}
+
+export async function fetchAllMetadata() {
+  const { data: teams } = await supabase.from("teams").select("*");
+  const { data: sellers } = await supabase.from("sellers").select("*");
+  return { teams: teams || [], sellers: sellers || [] };
 }

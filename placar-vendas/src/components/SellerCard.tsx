@@ -15,10 +15,6 @@ export function SellerCard({ seller, index, dailyGoal, weeklyGoal }: SellerCardP
   const prevSalesRef = useRef(seller.sales);
 
   useEffect(() => {
-    if (seller.sales > prevSalesRef.current) {
-      const audio = new Audio('/audio-cada-venda.mp3');
-      audio.play().catch(e => console.log('Audio play failed:', e));
-    }
     prevSalesRef.current = seller.sales;
   }, [seller.sales]);
   const formattedSales = new Intl.NumberFormat("pt-BR", {
@@ -26,13 +22,14 @@ export function SellerCard({ seller, index, dailyGoal, weeklyGoal }: SellerCardP
     currency: "BRL",
   }).format(seller.sales);
 
-  const missingDaily = Math.max(0, dailyGoal - seller.sales);
+  const currentDailyGoal = seller.dailyGoal || dailyGoal;
+  const missingDaily = Math.max(0, currentDailyGoal - seller.sales);
   const formattedMissing = new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
   }).format(missingDaily);
 
-  const hasMetDailyGoal = seller.sales >= dailyGoal;
+  const hasMetDailyGoal = seller.sales >= currentDailyGoal;
   const hasMetWeeklyGoal = seller.weeklySales >= weeklyGoal;
 
   const weeklyProgress = Math.min(100, (seller.weeklySales / weeklyGoal) * 100);

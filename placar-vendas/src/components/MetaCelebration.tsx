@@ -18,7 +18,9 @@ export function MetaCelebration({ seller, onFinished }: MetaCelebrationProps) {
   useEffect(() => {
     if (seller) {
       setIsPlaying(true);
-      const name = encodeURIComponent(seller.name);
+      // Tentar primeiro nome para o vídeo (Albert.mp4 em vez de Albert Souza.mp4)
+      const firstName = seller.name.split(' ')[0];
+      const name = encodeURIComponent(firstName);
       setVideoUrl(`/videos/${name}.mp4`);
 
       // Iniciar áudio de vitória
@@ -29,10 +31,11 @@ export function MetaCelebration({ seller, onFinished }: MetaCelebrationProps) {
       audioRef.current.play().catch(e => console.warn("Erro ao tocar áudio de vitória:", e));
 
       if (fallbackTimeoutRef.current) clearTimeout(fallbackTimeoutRef.current);
+      // Se não tiver vídeo nenhum após 10s, encerra a comemoração
       fallbackTimeoutRef.current = setTimeout(() => {
-         console.warn(`[EMERGÊNCIA] O vídeo travou ou não carregou após 15s.`);
+         console.warn(`[INFO] Encerrando comemoração após tempo limite.`);
          handleVideoEnded();
-      }, 15000);
+      }, 10000);
 
     } else {
       setIsPlaying(false);
@@ -68,7 +71,7 @@ export function MetaCelebration({ seller, onFinished }: MetaCelebrationProps) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0, transition: { duration: 1 } }}
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/90 pointer-events-auto"
+          className="fixed inset-0 z-[200] flex items-end justify-center bg-black/90 pointer-events-auto"
         >
           <video
             ref={videoRef}
@@ -79,22 +82,25 @@ export function MetaCelebration({ seller, onFinished }: MetaCelebrationProps) {
               e.currentTarget.play().catch(() => {});
             }}
             onPlaying={() => {
+              // Se o vídeo começar a tocar, limpamos o timeout de "emergência" e deixamos o vídeo ditar o fim
               if (fallbackTimeoutRef.current) clearTimeout(fallbackTimeoutRef.current);
             }}
             onError={(e) => {
               const video = e.currentTarget;
               const currentSrc = video.src.toLowerCase();
               
+              // Tentar extensões alternativas
               if (currentSrc.endsWith('.mp4')) {
                 video.src = video.src.replace('.mp4', '.mov');
+                video.load();
               } else if (currentSrc.endsWith('.mov')) {
                 video.src = video.src.replace('.mov', '.webm');
-              } else if (!currentSrc.includes('padrao.mp4')) {
-                video.src = "/videos/padrao.mp4";
+                video.load();
               } else {
-                handleVideoEnded();
+                // Se falhar tudo, esconde o vídeo mas mantém o card por alguns segundos
+                video.style.display = 'none';
+                console.warn("Nenhum vídeo encontrado para este vendedor.");
               }
-              video.load();
             }}
             className="absolute inset-0 w-full h-full object-cover"
             playsInline
@@ -123,11 +129,7 @@ export function MetaCelebration({ seller, onFinished }: MetaCelebrationProps) {
                    className="w-32 h-32 rounded-full border-4 border-yellow-500 shadow-[0_0_30px_rgba(234,179,8,0.5)] object-cover bg-zinc-800"
                    onError={(e) => {
                      const img = e.currentTarget;
-                     if (img.src.endsWith('.jpg')) {
-                       img.src = `/img/${encodeURIComponent(seller.name)}.png`;
-                     } else {
-                       img.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(seller.name)}&background=3f3f46&color=fff`;
-                     }
+                     img.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(seller.name)}&background=3f3f46&color=fff`;
                    }}
                  />
                </motion.div>

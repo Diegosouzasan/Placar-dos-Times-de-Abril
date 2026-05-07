@@ -6,6 +6,7 @@ import { MetaCelebration } from "./components/MetaCelebration";
 import { FloatingParticles } from "./components/FloatingParticles";
 import Controller from "./components/Controller";
 import { CategorySelection } from "./components/CategorySelection";
+import Reports from "./components/Reports";
 import { motion, AnimatePresence } from "framer-motion";
 
 function App() {
@@ -15,8 +16,11 @@ function App() {
   const [celebratingSeller, setCelebratingSeller] = useState<RankedSeller | null>(null);
   const [tvName, setTvName] = useState(() => localStorage.getItem('tvName') || "");
   const [tempTvName, setTempTvName] = useState("");
+  const [now, setNow] = useState(new Date());
+  const [isAudioEnabled, setIsAudioEnabled] = useState(false);
   
   const celebratedSellersRef = useRef<Set<number>>(new Set());
+  const lastSalesRef = useRef<Record<number, number>>({});
   const isFirstLoadRef = useRef(true);
 
   // Parse hash routing
@@ -29,6 +33,9 @@ function App() {
       } else if (hash.startsWith("#/clt")) {
         setCategory('CLT');
         setIsAdmin(hash.includes("/admin"));
+      } else if (hash.startsWith("#/reports")) {
+        setCategory('REPORTS' as any);
+        setIsAdmin(false);
       } else {
         setCategory(null);
         setIsAdmin(false);
@@ -49,36 +56,65 @@ function App() {
     const init = async () => {
       try {
         const initialData = await fetchPlacarData(category);
+        
+        // Inicializar mapa de vendas para evitar som no primeiro load
+        const initialSales: Record<number, number> = {};
+        initialData.teams.forEach(t => {
+           t.sellers.forEach(s => {
+              initialSales[s.id] = s.sales;
+           });
+        });
+        lastSalesRef.current = initialSales;
+
         setData(initialData);
         isFirstLoadRef.current = false;
       } catch (err) {
         console.error("Erro ao carregar dados do Supabase:", err);
       }
 
-      // Configurar Realtime
-      channel = supabase
-        .channel(`dashboard-realtime-${category}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'sellers' }, async (payload: any) => {
-          const newData = await fetchPlacarData(category);
-          
-          if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
-             const updatedSeller = payload.new;
-             const currentDailyGoal = newData.settings?.daily_goal || 20000;
+    // Configurar Realtime
+    channel = supabase
+      .channel(`dashboard-realtime-${category}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sellers' }, async (payload: any) => {
+        // Disparo imediato do áudio (antes do re-fetch para ser mais responsivo)
+        if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
+           const updatedSeller = payload.new;
+           const sellerId = Number(updatedSeller.id);
+           // Suporta total_sales (DB) ou totalSales (JS mapping se houver)
+           const totalSales = Number(updatedSeller.total_sales ?? updatedSeller.totalSales ?? 0);
+           const prevSales = lastSalesRef.current[sellerId] || 0;
 
-             if (updatedSeller.total_sales >= currentDailyGoal && !celebratedSellersRef.current.has(updatedSeller.id)) {
-                const fullSeller = newData.teams.flatMap(t => t.sellers).find(s => s.id === updatedSeller.id);
-                if (fullSeller) {
-                   setCelebratingSeller(fullSeller);
-                   celebratedSellersRef.current.add(updatedSeller.id);
-                }
-             }
-             if (updatedSeller.total_sales === 0) {
-                celebratedSellersRef.current.delete(updatedSeller.id);
-             }
-          }
-          
-          setData(newData);
-        })
+           if (totalSales > prevSales) {
+              const audio = new Audio('/audio-cada-venda.mp3');
+              audio.play().catch(e => {
+                 console.log('Audio play failed, disabling status:', e);
+                 setIsAudioEnabled(false);
+              });
+           }
+           lastSalesRef.current[sellerId] = totalSales;
+        }
+
+        const newData = await fetchPlacarData(category);
+        
+        if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
+           const updatedSeller = payload.new;
+           const sellerId = Number(updatedSeller.id);
+           const totalSales = Number(updatedSeller.total_sales ?? updatedSeller.totalSales ?? 0);
+
+           const sellerTeam = newData.teams.find(t => t.sellers.some(s => Number(s.id) === sellerId));
+           const fullSeller = sellerTeam?.sellers.find(s => Number(s.id) === sellerId);
+           const currentDailyGoal = fullSeller?.dailyGoal || sellerTeam?.dailyGoal || newData.settings?.daily_goal || 20000;
+
+           if (totalSales >= currentDailyGoal && !celebratedSellersRef.current.has(sellerId)) {
+              if (fullSeller) {
+                 setCelebratingSeller(fullSeller);
+                 celebratedSellersRef.current.add(sellerId);
+              }
+           }
+        }
+        
+        setData(newData);
+      })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, async () => {
           const newData = await fetchPlacarData(category);
           setData(newData);
@@ -99,11 +135,35 @@ function App() {
     };
   }, [category, isAdmin]);
 
+  // Timer para o ciclo das Metas Avulsas
+  useEffect(() => {
+    if (isAdmin) return;
+    const timer = setInterval(() => {
+      setNow(new Date());
+    }, 10000); // Atualiza a cada 10 segundos
+    return () => clearInterval(timer);
+  }, [isAdmin]);
+
   if (!category) {
-    return <CategorySelection onSelect={(cat) => window.location.hash = `#/${cat.toLowerCase()}`} />;
+    return <CategorySelection 
+      onSelect={(cat) => window.location.hash = `#/${cat.toLowerCase()}`} 
+      onOpenReports={() => window.location.hash = '#/reports'}
+    />;
   }
 
-  let overlayData = { media: [] as string[], index: 0, targetTv: "Todas", registeredTvs: [] as string[] };
+  if (category === ('REPORTS' as any)) {
+    return <Reports onBack={() => window.location.hash = '#/'} />;
+  }
+
+  let overlayData = { 
+    media: [] as string[], 
+    index: 0, 
+    targetTv: "Todas", 
+    registeredTvs: [] as string[],
+    activeTime: 1,
+    pauseTime: 15,
+    cycleStartTime: new Date().toISOString()
+  };
   try {
     if (data.settings?.overlay_url?.startsWith('{')) {
        overlayData = { ...overlayData, ...JSON.parse(data.settings?.overlay_url) };
@@ -120,6 +180,11 @@ function App() {
     
     localStorage.setItem('tvName', trimmed);
     setTvName(trimmed);
+
+    // Desbloquear áudio
+    const audio = new Audio('/audio-cada-venda.mp3');
+    audio.volume = 0;
+    audio.play().then(() => setIsAudioEnabled(true)).catch(() => setIsAudioEnabled(false));
 
     // Adiciona no BD se não existir
     if (!overlayData.registeredTvs) overlayData.registeredTvs = [];
@@ -222,9 +287,23 @@ function App() {
 
   const targetTv = overlayData.targetTv || "Todas";
   const isTargetAll = targetTv === "Todas" || targetTv === "Todas as TVs" || targetTv === "";
+  
+  // Lógica de Ciclo (Ativo / Pausa)
+  let isTimerActive = true;
+  if (overlayData.activeTime > 0 && (overlayData.pauseTime || 0) > 0) {
+     const cycleDurationMs = (overlayData.activeTime + overlayData.pauseTime) * 60 * 1000;
+     const activeDurationMs = overlayData.activeTime * 60 * 1000;
+     const startTime = new Date(overlayData.cycleStartTime || now).getTime();
+     const elapsedMs = now.getTime() - startTime;
+     const timeInCycle = elapsedMs % cycleDurationMs;
+     
+     isTimerActive = timeInCycle < activeDurationMs;
+  }
+
   const isOverlayActive = data.settings?.is_overlay_active && 
                           overlayData.media.length > 0 && 
-                          (isTargetAll || targetTv === tvName);
+                          (isTargetAll || targetTv === tvName) &&
+                          isTimerActive;
   
   const currentMediaUrl = overlayData.media[overlayData.index] || "";
 
@@ -287,19 +366,49 @@ function App() {
       <FloatingParticles />
 
       {/* CABEÇALHO DO PLACAR */}
-      <div className="relative z-10 flex-shrink-0 flex items-center justify-between mb-4 lg:mb-6 pt-2 px-4 lg:px-10">
-        <button 
-          onClick={() => window.location.hash = ""}
-          className="text-zinc-500 hover:text-white transition-colors flex items-center gap-2 font-bold uppercase tracking-widest text-xs"
-        >
-          ← Voltar
-        </button>
+      <div className="relative z-20 flex-shrink-0 flex items-center justify-center mb-4 lg:mb-6 pt-6 px-4 lg:px-10 min-h-[80px]">
+        {/* Lado Esquerdo: Voltar */}
+        <div className="absolute left-4 lg:left-10">
+          <button 
+            onClick={() => window.location.hash = ""}
+            className="text-zinc-500 hover:text-white transition-colors flex items-center gap-2 font-bold uppercase tracking-widest text-xs"
+          >
+            ← Voltar
+          </button>
+        </div>
         
-        <h1 className="text-[clamp(1.5rem,5vh,3.5rem)] tracking-tighter uppercase font-black bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-teal-200 drop-shadow-sm leading-none">
+        {/* Centro: Título */}
+        <h1 className="text-[clamp(1.5rem,6vh,4rem)] tracking-tighter uppercase font-black bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-teal-200 drop-shadow-[0_2px_10px_rgba(16,185,129,0.3)] leading-none text-center">
           Placar {category}
         </h1>
 
-        <div className="w-20" /> {/* Spacer */}
+        {/* Lado Direito: Audio Status */}
+        <div className="absolute right-4 lg:right-10">
+          <AnimatePresence>
+            {!isAudioEnabled && (
+              <motion.div 
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                className="flex items-center gap-4"
+              >
+                 <button 
+                   onClick={() => {
+                      const audio = new Audio('/audio-cada-venda.mp3');
+                      audio.volume = 0;
+                      audio.play().then(() => setIsAudioEnabled(true)).catch(console.error);
+                   }}
+                   className="flex items-center gap-2 bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest animate-pulse hover:bg-red-500/30 transition-colors"
+                 >
+                    Ativar Som
+                 </button>
+                 <div className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 border border-white/10">
+                    <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]" />
+                 </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
 
       {/* DASHBOARD GRID */}
@@ -311,8 +420,8 @@ function App() {
             <TeamBoard 
               teamData={team as any} 
               isWinning={data.winningTeam === team.teamName && data.teams.length > 1} 
-              dailyGoal={dailyGoal}
-              weeklyGoal={weeklyGoal}
+              dailyGoal={team.dailyGoal}
+              weeklyGoal={team.weeklyGoal}
               isSingleTeam={data.teams.length === 1}
             />
           </div>
