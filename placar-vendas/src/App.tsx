@@ -21,6 +21,7 @@ function App() {
   
   const celebratedSellersRef = useRef<Set<number>>(new Set());
   const lastSalesRef = useRef<Record<number, number>>({});
+  const categoryTeamIdsRef = useRef<Set<number>>(new Set());
   const isFirstLoadRef = useRef(true);
 
   // Parse hash routing
@@ -59,12 +60,15 @@ function App() {
         
         // Inicializar mapa de vendas para evitar som no primeiro load
         const initialSales: Record<number, number> = {};
+        const teamIds = new Set<number>();
         initialData.teams.forEach(t => {
+           teamIds.add(t.id);
            t.sellers.forEach(s => {
               initialSales[s.id] = s.sales;
            });
         });
         lastSalesRef.current = initialSales;
+        categoryTeamIdsRef.current = teamIds;
 
         setData(initialData);
         isFirstLoadRef.current = false;
@@ -79,22 +83,36 @@ function App() {
         // Disparo imediato do áudio (antes do re-fetch para ser mais responsivo)
         if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
            const updatedSeller = payload.new;
+           const teamId = Number(updatedSeller.team_id);
            const sellerId = Number(updatedSeller.id);
-           // Suporta total_sales (DB) ou totalSales (JS mapping se houver)
-           const totalSales = Number(updatedSeller.total_sales ?? updatedSeller.totalSales ?? 0);
-           const prevSales = lastSalesRef.current[sellerId] || 0;
+           const isOurCategory = categoryTeamIdsRef.current.has(teamId);
+           const wasOurCategory = Object.prototype.hasOwnProperty.call(lastSalesRef.current, sellerId);
 
-           if (totalSales > prevSales) {
-              const audio = new Audio('/audio-cada-venda.mp3');
-              audio.play().catch(e => {
-                 console.log('Audio play failed, disabling status:', e);
-                 setIsAudioEnabled(false);
-              });
+           if (!isOurCategory && !wasOurCategory) {
+              return; // Vendedor de outra categoria, ignora completamente
            }
-           lastSalesRef.current[sellerId] = totalSales;
+
+           // Áudio: somente se o vendedor pertence à categoria atual
+           if (isOurCategory) {
+              const totalSales = Number(updatedSeller.total_sales ?? updatedSeller.totalSales ?? 0);
+              const prevSales = lastSalesRef.current[sellerId] || 0;
+
+              if (totalSales > prevSales) {
+                 const audio = new Audio('/audio-cada-venda.mp3');
+                 audio.play().catch(e => {
+                    console.log('Audio play failed, disabling status:', e);
+                    setIsAudioEnabled(false);
+                 });
+              }
+              lastSalesRef.current[sellerId] = totalSales;
+           } else {
+              // Seller was ours but moved out. Remove from tracking.
+              delete lastSalesRef.current[sellerId];
+           }
         }
 
         const newData = await fetchPlacarData(category);
+        categoryTeamIdsRef.current = new Set(newData.teams.map(t => t.id));
         
         if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
            const updatedSeller = payload.new;
@@ -117,6 +135,7 @@ function App() {
       })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, async () => {
           const newData = await fetchPlacarData(category);
+          categoryTeamIdsRef.current = new Set(newData.teams.map(t => t.id));
           setData(newData);
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'placar_settings' }, async () => {

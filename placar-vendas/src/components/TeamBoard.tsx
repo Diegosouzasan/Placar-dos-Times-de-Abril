@@ -30,17 +30,23 @@ export function TeamBoard({ teamData, isWinning, dailyGoal, weeklyGoal, isSingle
           {/* Logo da Equipe, Fotos, Nome e Badge permanecem iguais */}
           <div className="relative">
              <img
-               src={`/img/LOGO ${teamData.teamName}.png`}
+               src={
+                 teamData.teamName.toUpperCase() === "TROPA DE ELITE" ? "/img/Logos/Logo Tropa de Elite.png" :
+                 teamData.teamName.toUpperCase() === "AGUIAS" ? "/img/Logos/Logo Aguias.png" :
+                 teamData.teamName.toUpperCase() === "PATROAS" ? "/img/Logos/Logo Patroas.png" :
+                 `/img/Logos/Logo ${teamData.teamName}.png`
+               }
                alt={`Logo ${teamData.teamName}`}
-               className="w-[clamp(6rem,14vh,9rem)] h-[clamp(6rem,14vh,9rem)] object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.2)] scale-110"
+               className={`w-[clamp(6rem,14vh,9rem)] h-[clamp(6rem,14vh,9rem)] object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.2)] ${
+                 teamData.teamName.toUpperCase() === "PATROAS" ? "scale-95" : "scale-110"
+               }`}
                onError={(e) => {
                  const img = e.currentTarget;
-                 if (img.src.includes('LOGO%20')) {
-                   img.src = `/img/${teamData.teamName}.png`;
-                 } else if (img.src.endsWith('.png') && !img.src.endsWith('.jpg')) {
-                    img.src = `/img/${teamData.teamName}.jpg`;
+                 // Fallback para o padrão antigo ou ocultar
+                 if (!img.src.includes('/Logos/')) {
+                    img.style.display = 'none';
                  } else {
-                   img.style.display = 'none';
+                    img.src = `/img/LOGO ${teamData.teamName}.png`;
                  }
                }}
              />
