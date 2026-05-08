@@ -45,10 +45,10 @@ export function SellerCard({ seller, index, dailyGoal, weeklyGoal }: SellerCardP
       className={clsx(
         "relative flex items-center justify-between px-3 lg:px-6 py-[clamp(0.2rem,1.2vh,0.75rem)] rounded-xl lg:rounded-2xl transition-all",
         "backdrop-blur-md flex-1 min-h-[40px]",
-        hasMetWeeklyGoal 
+        hasMetWeeklyGoal
           ? "bg-gradient-to-r from-blue-600/30 to-indigo-600/5 border border-blue-400/60 shadow-[0_0_20px_rgba(37,99,235,0.4)] z-10"
-          : hasMetDailyGoal 
-            ? "bg-gradient-to-r from-yellow-500/20 to-amber-500/5 border border-yellow-500/60 shadow-[0_0_20px_rgba(234,179,8,0.3)] z-10" 
+          : hasMetDailyGoal
+            ? "bg-gradient-to-r from-yellow-500/20 to-amber-500/5 border border-yellow-500/60 shadow-[0_0_20px_rgba(234,179,8,0.3)] z-10"
             : "bg-white/5 border border-white/10 shadow-sm hover:bg-white/10"
       )}
     >
@@ -56,7 +56,7 @@ export function SellerCard({ seller, index, dailyGoal, weeklyGoal }: SellerCardP
       {hasMetWeeklyGoal && (
         <div className="absolute inset-0 rounded-xl lg:rounded-2xl bg-white/10 mix-blend-overlay animate-pulse pointer-events-none shadow-[inset_0_0_15px_rgba(255,255,255,0.3)]" />
       )}
-      
+
       {/* Brilho Meta Diária (Amarelo) */}
       {hasMetDailyGoal && !hasMetWeeklyGoal && (
         <div className="absolute inset-0 rounded-xl lg:rounded-2xl bg-yellow-500/10 mix-blend-overlay animate-pulse pointer-events-none" />
@@ -66,19 +66,41 @@ export function SellerCard({ seller, index, dailyGoal, weeklyGoal }: SellerCardP
         <span className="text-zinc-500 font-mono text-[clamp(0.75rem,2vh,1.125rem)] w-4 flex-shrink-0 text-center">
           {index + 1}
         </span>
-        
-        <div className="relative flex items-center h-full">
+
+        <div className="relative w-[clamp(2rem,6vh,3rem)] h-[clamp(2rem,6vh,3rem)] flex-shrink-0">
+          {hasMetWeeklyGoal && (
+            <motion.img
+              initial={{ scale: 0, rotate: -40 }}
+              animate={{ 
+                scale: [1, 1.05, 1],
+                rotate: -32,
+                filter: [
+                  "drop-shadow(0 0 8px rgba(234, 179, 8, 0.4)) drop-shadow(0 4px 10px rgba(0,0,0,0.9))",
+                  "drop-shadow(0 0 20px rgba(234, 179, 8, 0.8)) drop-shadow(0 4px 10px rgba(0,0,0,0.9))",
+                  "drop-shadow(0 0 8px rgba(234, 179, 8, 0.4)) drop-shadow(0 4px 10px rgba(0,0,0,0.9))"
+                ]
+              }}
+              transition={{ 
+                scale: { repeat: Infinity, duration: 3 },
+                filter: { repeat: Infinity, duration: 3 },
+                rotate: { duration: 0.5 } // Keep the initial rotate stable after entry
+              }}
+              src="/img/Coroa.png"
+              alt="Coroa"
+              className="absolute -top-7 -left-4 w-9 h-9 z-50 pointer-events-none max-w-none"
+            />
+          )}
           <img
             src={seller.photoUrl}
             alt={seller.name}
             className={clsx(
-              "w-[clamp(2rem,6vh,3rem)] h-[clamp(2rem,6vh,3rem)] rounded-full object-cover border shadow-[0_0_10px_rgba(0,0,0,0.5)]",
+              "w-full h-full rounded-full object-cover border shadow-[0_0_10px_rgba(0,0,0,0.5)]",
               hasMetWeeklyGoal ? "border-blue-400" : "border-white/20"
             )}
             onError={(e) => {
               const img = e.currentTarget;
               const sellerFirstName = seller.name.split(' ')[0];
-              
+
               if (img.src.includes('avatar')) return; // Evita loop infinito
 
               if (img.src.includes('http') && !img.src.includes('ui-avatars')) {
@@ -101,37 +123,37 @@ export function SellerCard({ seller, index, dailyGoal, weeklyGoal }: SellerCardP
             <span className={clsx(
               "leading-tight tracking-tight text-[clamp(0.8rem,2.5vh,1.125rem)] truncate",
               hasMetWeeklyGoal ? "text-white font-black drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]" :
-              hasMetDailyGoal ? "text-yellow-300 font-bold" : "text-white font-medium"
+                hasMetDailyGoal ? "text-yellow-300 font-bold" : "text-white font-medium"
             )}>
               {seller.name}
             </span>
           </div>
-          
+
           <div className="mt-1.5 relative">
             <div className="h-1.5 lg:h-2 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
-                 <motion.div 
-                   initial={{ width: 0 }}
-                   animate={{ width: `${weeklyProgress}%` }}
-                   transition={{ duration: 1.5, ease: "circOut" }}
-                   className={clsx(
-                     "h-full rounded-full relative animate-gradient-flow",
-                     hasMetWeeklyGoal 
-                       ? "bg-gradient-to-r from-blue-400 via-white to-blue-400 shadow-[0_0_15px_rgba(255,255,255,0.6)]" 
-                       : "bg-gradient-to-r from-emerald-500 via-teal-400 to-blue-500"
-                   )}
-                 >
-                    {/* Faísca que percorre a barra */}
-                    <div className="absolute inset-0 overflow-hidden rounded-full">
-                       <div className="absolute top-0 bottom-0 w-20 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-sparkle" />
-                    </div>
-                    
-                    {/* Brilho interno líquido */}
-                    <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,rgba(255,255,255,0.2)_50%,transparent_100%)] w-1/2 animate-[shimmer_2s_infinite]" />
-                 </motion.div>
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${weeklyProgress}%` }}
+                transition={{ duration: 1.5, ease: "circOut" }}
+                className={clsx(
+                  "h-full rounded-full relative animate-gradient-flow",
+                  hasMetWeeklyGoal
+                    ? "bg-gradient-to-r from-blue-400 via-white to-blue-400 shadow-[0_0_15px_rgba(255,255,255,0.6)]"
+                    : "bg-gradient-to-r from-emerald-500 via-teal-400 to-blue-500"
+                )}
+              >
+                {/* Faísca que percorre a barra */}
+                <div className="absolute inset-0 overflow-hidden rounded-full">
+                  <div className="absolute top-0 bottom-0 w-20 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-sparkle" />
+                </div>
+
+                {/* Brilho interno líquido */}
+                <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,rgba(255,255,255,0.2)_50%,transparent_100%)] w-1/2 animate-[shimmer_2s_infinite]" />
+              </motion.div>
             </div>
 
             {/* Valor Flutuante Abaixo da Barra (Fora do overflow-hidden) */}
-            <motion.div 
+            <motion.div
               initial={{ left: 0 }}
               animate={{ left: `${weeklyProgress}%` }}
               transition={{ duration: 1.5, ease: "circOut" }}
@@ -155,9 +177,9 @@ export function SellerCard({ seller, index, dailyGoal, weeklyGoal }: SellerCardP
           className={clsx(
             "font-mono tracking-tighter text-[clamp(1rem,2.5vh,1.5rem)] whitespace-nowrap",
             hasMetWeeklyGoal ? "text-white font-black drop-shadow-[0_0_12px_rgba(255,255,255,0.6)]" :
-            hasMetDailyGoal 
-              ? "text-yellow-400 font-black drop-shadow-[0_0_10px_rgba(234,179,8,0.6)]" 
-              : (seller.sales > 0 ? "font-bold text-emerald-400" : "font-bold text-zinc-600")
+              hasMetDailyGoal
+                ? "text-yellow-400 font-black drop-shadow-[0_0_10px_rgba(234,179,8,0.6)]"
+                : (seller.sales > 0 ? "font-bold text-emerald-400" : "font-bold text-zinc-600")
           )}
         >
           {formattedSales}
@@ -167,9 +189,9 @@ export function SellerCard({ seller, index, dailyGoal, weeklyGoal }: SellerCardP
       {/* Coluna Falta */}
       <div className="w-24 lg:w-32 flex justify-end items-center shrink-0 relative z-10">
         {!hasMetDailyGoal && (
-           <span className="text-[clamp(0.8rem,2vh,1.1rem)] text-red-500/90 font-mono font-bold tracking-tighter animate-pulse">
-             {formattedMissing.replace("R$", "").trim()}
-           </span>
+          <span className="text-[clamp(0.8rem,2vh,1.1rem)] text-red-500/90 font-mono font-bold tracking-tighter animate-pulse">
+            {formattedMissing.replace("R$", "").trim()}
+          </span>
         )}
         {hasMetDailyGoal && (
           <span className="text-emerald-500 font-bold text-[0.7rem] uppercase tracking-widest text-right">
