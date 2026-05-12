@@ -368,7 +368,7 @@ export default function Controller({ category }: ControllerProps) {
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto space-y-8">
+      <div className="max-w-[1400px] mx-auto space-y-8">
         
         {/* SEÇÃO DE METAS GLOBAIS E OVERLAY */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -740,7 +740,7 @@ export default function Controller({ category }: ControllerProps) {
            </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 gap-8">
           {data?.teams.map((team) => {
             const otherTeam = data.teams.find(t => t.id !== team.id);
             
@@ -849,92 +849,94 @@ export default function Controller({ category }: ControllerProps) {
                   </div>
                 )}
 
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <h3 className="text-xs text-gray-500 font-bold uppercase tracking-widest flex items-center gap-2">
                     <Users className="w-3 h-3" /> Vendedores
                   </h3>
                   
-                  {team.sellers.map((seller) => (
-                    <div key={seller.id} className="group bg-black/20 rounded-2xl p-4 border border-white/5 hover:border-white/10 transition-all flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <img 
-                          src={seller.photoUrl} 
-                          alt={seller.name} 
-                          className="w-10 h-10 rounded-xl object-cover" 
-                          onError={(e) => {
-                            const img = e.currentTarget;
-                            // Tentar /img/ dinâmico se a URL primária falhar
-                            if (img.src.includes('http') && !img.src.includes('ui-avatars')) {
-                              img.src = `/img/${encodeURIComponent(seller.name.split(' ')[0])}.png`;
-                            } else if (img.src.endsWith('.png')) {
-                              img.src = img.src.replace('.png', '.jpg');
-                            } else {
-                              img.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(seller.name)}&background=3f3f46&color=fff`;
-                            }
-                          }} 
-                        />
-                        <div>
-                          <p className="font-bold text-sm">{seller.name}</p>
-                          <div className="flex gap-2 text-[10px] font-mono leading-none mt-1">
-                             <span className="text-emerald-500">D: R$ {seller.sales.toLocaleString('pt-BR')}</span>
-                             <span className="text-blue-400">S: R$ {(seller.weeklySales || 0).toLocaleString('pt-BR')}</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {team.sellers.map((seller) => (
+                      <div key={seller.id} className="group bg-black/40 rounded-2xl p-4 border border-white/5 hover:border-white/10 transition-all flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-4 flex-1 min-w-0">
+                          <img 
+                            src={seller.photoUrl} 
+                            alt={seller.name} 
+                            className="w-10 h-10 rounded-xl object-cover" 
+                            onError={(e) => {
+                              const img = e.currentTarget;
+                              // Tentar /img/ dinâmico se a URL primária falhar
+                              if (img.src.includes('http') && !img.src.includes('ui-avatars')) {
+                                img.src = `/img/${encodeURIComponent(seller.name.split(' ')[0])}.png`;
+                              } else if (img.src.endsWith('.png')) {
+                                img.src = img.src.replace('.png', '.jpg');
+                              } else {
+                                img.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(seller.name)}&background=3f3f46&color=fff`;
+                              }
+                            }} 
+                          />
+                          <div>
+                            <p className="font-bold text-sm">{seller.name}</p>
+                            <div className="flex gap-2 text-[10px] font-mono leading-none mt-1">
+                               <span className="text-emerald-500">D: R$ {seller.sales.toLocaleString('pt-BR')}</span>
+                               <span className="text-blue-400">S: R$ {(seller.weeklySales || 0).toLocaleString('pt-BR')}</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      <div className="flex items-center gap-2">
-                         {editingSeller === seller.id ? (
-                            <div className="flex items-center gap-1">
-                               <input autoFocus type="text" value={newValue} onChange={(e) => setNewValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleUpdateSales(seller.id); }} className="bg-blue-900/40 border border-blue-500/50 rounded-lg p-2 w-28 text-sm outline-none" />
-                               <button onClick={() => handleUpdateSales(seller.id)} className="p-2 bg-green-600 rounded-lg hover:bg-green-500"><Save className="w-4 h-4" /></button>
-                               <button onClick={() => setEditingSeller(null)} className="p-2 bg-red-600 rounded-lg hover:bg-red-500"><X className="w-4 h-4" /></button>
-                            </div>
-                         ) : (
-                           <>
-                               {editingSellerGoal === seller.id ? (
-                                 <input 
-                                   type="number"
-                                   autoFocus
-                                   placeholder="Meta"
-                                   defaultValue={overlayData.sellerGoals?.[seller.id] || ""}
-                                   onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                         const val = (e.target as HTMLInputElement).value;
-                                         const newGoals = { ...(overlayData.sellerGoals || {}) };
-                                         if (val && parseInt(val) > 0) newGoals[seller.id] = parseInt(val);
-                                         else delete newGoals[seller.id];
-                                         saveOverlay({ sellerGoals: newGoals });
-                                         setEditingSellerGoal(null);
-                                      }
-                                      if (e.key === 'Escape') setEditingSellerGoal(null);
-                                   }}
-                                   onBlur={(e) => {
-                                      const val = e.target.value;
-                                      const newGoals = { ...(overlayData.sellerGoals || {}) };
-                                      if (val && parseInt(val) > 0) newGoals[seller.id] = parseInt(val);
-                                      else delete newGoals[seller.id];
-                                      saveOverlay({ sellerGoals: newGoals });
-                                      setEditingSellerGoal(null);
-                                   }}
-                                   className="w-20 bg-yellow-500/10 border border-yellow-500/50 rounded-lg p-1 text-xs font-bold text-yellow-500 outline-none text-right"
-                                 />
-                               ) : (
-                                 <button 
-                                   onClick={() => setEditingSellerGoal(seller.id)} 
-                                   className={`p-2 rounded-xl transition-all ${overlayData.sellerGoals?.[seller.id] ? 'bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30' : 'hover:bg-white/5 text-zinc-500'}`}
-                                   title="Definir Meta Individual"
-                                 >
-                                    <span className="text-[10px] font-black">{overlayData.sellerGoals?.[seller.id] ? `${(overlayData.sellerGoals[seller.id]/1000).toFixed(0)}k` : 'Meta'}</span>
-                                 </button>
-                               )}
-                              <button onClick={() => { setEditingSeller(seller.id); setNewValue(seller.sales > 0 ? seller.sales.toString() : ""); }} className="p-2 hover:bg-white/5 rounded-xl text-blue-400 transition-opacity" ><Plus className="w-4 h-4" /></button>
-                              <button onClick={() => otherTeam && handleMoveSeller(seller.id, team.id, otherTeam.id)} className="p-2 hover:bg-white/5 rounded-xl text-yellow-400 transition-opacity" ><ArrowLeftRight className="w-4 h-4" /></button>
-                              <button onClick={() => handleDeleteSeller(seller.id)} className="p-2 hover:bg-white/5 rounded-xl text-red-500 transition-opacity" ><Trash2 className="w-4 h-4" /></button>
-                           </>
-                         )}
+                        <div className="flex items-center gap-2 shrink-0">
+                           {editingSeller === seller.id ? (
+                              <div className="flex items-center gap-1">
+                                 <input autoFocus type="text" value={newValue} onChange={(e) => setNewValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleUpdateSales(seller.id); }} className="bg-blue-900/40 border border-blue-500/50 rounded-lg p-2 w-28 text-sm outline-none" />
+                                 <button onClick={() => handleUpdateSales(seller.id)} className="p-2 bg-green-600 rounded-lg hover:bg-green-500"><Save className="w-4 h-4" /></button>
+                                 <button onClick={() => setEditingSeller(null)} className="p-2 bg-red-600 rounded-lg hover:bg-red-500"><X className="w-4 h-4" /></button>
+                              </div>
+                           ) : (
+                             <>
+                                 {editingSellerGoal === seller.id ? (
+                                   <input 
+                                     type="number"
+                                     autoFocus
+                                     placeholder="Meta"
+                                     defaultValue={overlayData.sellerGoals?.[seller.id] || ""}
+                                     onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                           const val = (e.target as HTMLInputElement).value;
+                                           const newGoals = { ...(overlayData.sellerGoals || {}) };
+                                           if (val && parseInt(val) > 0) newGoals[seller.id] = parseInt(val);
+                                           else delete newGoals[seller.id];
+                                           saveOverlay({ sellerGoals: newGoals });
+                                           setEditingSellerGoal(null);
+                                        }
+                                        if (e.key === 'Escape') setEditingSellerGoal(null);
+                                     }}
+                                     onBlur={(e) => {
+                                        const val = e.target.value;
+                                        const newGoals = { ...(overlayData.sellerGoals || {}) };
+                                        if (val && parseInt(val) > 0) newGoals[seller.id] = parseInt(val);
+                                        else delete newGoals[seller.id];
+                                        saveOverlay({ sellerGoals: newGoals });
+                                        setEditingSellerGoal(null);
+                                     }}
+                                     className="w-20 bg-yellow-500/10 border border-yellow-500/50 rounded-lg p-1 text-xs font-bold text-yellow-500 outline-none text-right"
+                                   />
+                                 ) : (
+                                   <button 
+                                     onClick={() => setEditingSellerGoal(seller.id)} 
+                                     className={`p-2 rounded-xl transition-all ${overlayData.sellerGoals?.[seller.id] ? 'bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30' : 'hover:bg-white/5 text-zinc-500'}`}
+                                     title="Definir Meta Individual"
+                                   >
+                                      <span className="text-[10px] font-black">{overlayData.sellerGoals?.[seller.id] ? `${(overlayData.sellerGoals[seller.id]/1000).toFixed(0)}k` : 'Meta'}</span>
+                                   </button>
+                                 )}
+                                <button onClick={() => { setEditingSeller(seller.id); setNewValue(seller.sales > 0 ? seller.sales.toString() : ""); }} className="p-2 hover:bg-white/5 rounded-xl text-blue-400 transition-opacity" ><Plus className="w-4 h-4" /></button>
+                                <button onClick={() => otherTeam && handleMoveSeller(seller.id, team.id, otherTeam.id)} className="p-2 hover:bg-white/5 rounded-xl text-yellow-400 transition-opacity" ><ArrowLeftRight className="w-4 h-4" /></button>
+                                <button onClick={() => handleDeleteSeller(seller.id)} className="p-2 hover:bg-white/5 rounded-xl text-red-500 transition-opacity" ><Trash2 className="w-4 h-4" /></button>
+                             </>
+                           )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
 
                   <button onClick={() => setSelectedTeamForNewSeller(team.id)} className="w-full border border-dashed border-white/10 p-4 rounded-2xl hover:bg-white/5 hover:border-white/20 transition-all text-sm text-gray-400 font-medium flex items-center justify-center gap-2" >
                     <Plus className="w-4 h-4" /> Adicionar Vendedor

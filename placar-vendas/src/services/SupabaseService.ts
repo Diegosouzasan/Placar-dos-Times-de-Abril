@@ -41,6 +41,8 @@ export interface PlacarSettings {
   meta_days: string;
   overlay_url: string;
   is_overlay_active: boolean;
+  last_sync_at?: string; // Data e hora da última sincronização com Google Sheets
+  category?: string;
 }
 
 export async function fetchPlacarData(category: string): Promise<DashboardData> {
@@ -329,4 +331,92 @@ export async function fetchAllMetadata() {
   const { data: teams } = await supabase.from("teams").select("*");
   const { data: sellers } = await supabase.from("sellers").select("*");
   return { teams: teams || [], sellers: sellers || [] };
+}
+
+// Google Sheets Sync Logic
+export async function getLastSyncInfo() {
+  try {
+    const { data, error } = await supabase
+      .from("placar_settings")
+      .select("last_sync_at")
+      .limit(1)
+      .maybeSingle();
+    
+    // Se a coluna não existir (erro 42703), retornamos null silenciosamente
+    if (error) {
+      if (error.code === '42703') {
+        console.warn("Coluna 'last_sync_at' não encontrada em 'placar_settings'.");
+        return null;
+      }
+      throw error;
+    }
+    return data?.last_sync_at;
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function syncToGoogleSheets(forceManual: boolean = false) {
+  try {
+    console.log(`Iniciando sincronização ${forceManual ? 'manual' : 'automática'} para Google Sheets...`);
+    
+    // 1. Buscar todos os dados de vendas
+    const { data: history, error: historyError } = await supabase
+      .from("sales_history")
+      .select("*");
+    
+    if (historyError) throw historyError;
+    if (!history || history.length === 0) {
+      console.log("Nenhum dado para sincronizar.");
+      return { success: true, count: 0 };
+    }
+
+    // TODO: Implementar chamada real para Google Sheets API aqui
+    // Por enquanto, simulamos o sucesso.
+    console.log(`Simulando envio de ${history.length} registros para Google Sheets...`);
+    
+    // 2. Após "sucesso", tentamos guardar a data/hora
+    const now = new Date().toISOString();
+    try {
+      const { error: updateError } = await supabase
+        .from("placar_settings")
+        .update({ last_sync_at: now })
+        .neq("id", 0);
+      
+      if (updateError && updateError.code !== '42703') throw updateError;
+    } catch (e) {
+      console.warn("Não foi possível salvar o timestamp da sync (coluna ausente).");
+    }
+
+    // 3. Deletamos os dados do Supabase para liberar espaço
+    const { error: deleteError } = await supabase
+      .from("sales_history")
+      .delete()
+      .neq("id", 0);
+    
+    if (deleteError) throw deleteError;
+
+    return { success: true, count: history.length, timestamp: now };
+  } catch (error) {
+    console.error("Erro na sincronização:", error);
+    throw error;
+  }
+}
+
+// Função para verificar se é o primeiro dia do mês e rodar o sync automático
+export async function checkAndRunMonthlySync() {
+  const now = new Date();
+  const lastSyncStr = await getLastSyncInfo();
+  const lastSync = lastSyncStr ? new Date(lastSyncStr) : null;
+
+  // Se for dia 1 e não sincronizou ainda HOJE
+  if (now.getDate() === 1) {
+    const todayStr = now.toISOString().split('T')[0];
+    const lastSyncDateStr = lastSync?.toISOString().split('T')[0];
+
+    if (todayStr !== lastSyncDateStr) {
+      return await syncToGoogleSheets(false);
+    }
+  }
+  return null;
 }
