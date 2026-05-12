@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
-import { fetchSalesHistory, resetSalesHistory, fetchAllMetadata, syncToGoogleSheets, checkAndRunMonthlySync, getLastSyncInfo } from '../services/SupabaseService';
+import { fetchSalesHistory, fetchAllMetadata, syncToGoogleSheets, checkAndRunMonthlySync, getLastSyncInfo } from '../services/SupabaseService';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Area, AreaChart 
 } from 'recharts';
 import * as XLSX from 'xlsx';
 import { format, parseISO } from 'date-fns';
-import { Download, Filter, ArrowLeft, RefreshCw, AlertTriangle, TrendingUp, DollarSign, Calendar, BarChart3, X, User, Activity, CloudUpload, History } from 'lucide-react';
+import { Download, Filter, ArrowLeft, RefreshCw, TrendingUp, DollarSign, Calendar, BarChart3, X, User, Activity, CloudUpload, History } from 'lucide-react';
 
 export default function Reports({ onBack }: { onBack: () => void }) {
   const [rawData, setRawData] = useState<any[]>([]);
@@ -47,13 +47,13 @@ export default function Reports({ onBack }: { onBack: () => void }) {
     loadData();
     // Verificar sync automático ao abrir
     checkAndRunMonthlySync().then(res => {
-      if (res?.success) {
+      if (res?.success && res.timestamp) {
         setLastSyncAt(res.timestamp);
         loadData();
       }
     });
     // Buscar info da última sync
-    getLastSyncInfo().then(setLastSyncAt);
+    getLastSyncInfo().then(val => setLastSyncAt(val || null));
   }, [startDate, endDate]);
 
   const filteredData = useMemo(() => {
@@ -188,7 +188,7 @@ export default function Reports({ onBack }: { onBack: () => void }) {
       try {
         setSyncing(true);
         const res = await syncToGoogleSheets(true);
-        if (res.success) {
+        if (res.success && res.timestamp) {
           setLastSyncAt(res.timestamp);
           alert(`Sincronização concluída! ${res.count} registros enviados.`);
           loadData();
