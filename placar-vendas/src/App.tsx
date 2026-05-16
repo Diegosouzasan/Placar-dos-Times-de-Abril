@@ -9,6 +9,7 @@ import Controller from "./components/Controller";
 import { CategorySelection } from "./components/CategorySelection";
 import Reports from "./components/Reports";
 import { motion, AnimatePresence } from "framer-motion";
+import { VideoPreloader } from "./components/VideoPreloader";
 
 function App() {
   const [category, setCategory] = useState<'INSS' | 'CLT' | null>(null);
@@ -502,6 +503,9 @@ function App() {
           </div>
         )}
       </div>
+
+      {/* PRÉ-CARREGAMENTO DE VÍDEOS */}
+      <VideoPreloader data={data} />
 
       {/* OVERLAY DE COMEMORAÇÃO */}
       <MetaCelebration 
