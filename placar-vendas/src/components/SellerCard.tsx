@@ -9,10 +9,9 @@ interface SellerCardProps {
   index: number;
   dailyGoal: number;
   weeklyGoal: number;
-  compact?: boolean;
 }
 
-export function SellerCard({ seller, index, dailyGoal, weeklyGoal, compact }: SellerCardProps) {
+export function SellerCard({ seller, index, dailyGoal, weeklyGoal }: SellerCardProps) {
   const prevSalesRef = useRef(seller.sales);
 
   useEffect(() => {

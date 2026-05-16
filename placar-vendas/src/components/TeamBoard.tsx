@@ -1,6 +1,6 @@
 import type { TeamData } from "../services/SupabaseService";
 import { SellerCard } from "./SellerCard";
-import { Trophy, Zap } from "lucide-react";
+import { Trophy } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface TeamBoardProps {
@@ -122,7 +122,6 @@ export function TeamBoard({ teamData, isWinning, dailyGoal, weeklyGoal, isSingle
                   index={idx} 
                   dailyGoal={dailyGoal}
                   weeklyGoal={weeklyGoal}
-                  compact={true}
                 />
               ))}
             </div>
@@ -136,7 +135,6 @@ export function TeamBoard({ teamData, isWinning, dailyGoal, weeklyGoal, isSingle
                   index={idx + cltSellers.length} 
                   dailyGoal={dailyGoal}
                   weeklyGoal={weeklyGoal}
-                  compact={true}
                 />
               ))}
             </div>
