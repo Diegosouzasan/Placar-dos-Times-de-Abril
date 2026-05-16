@@ -3,6 +3,7 @@ import { fetchPlacarData, updateSettings, type DashboardData, type RankedSeller 
 import { supabase } from "./services/supabaseClient";
 import { TeamBoard } from "./components/TeamBoard";
 import { MetaCelebration } from "./components/MetaCelebration";
+import type { Team300kCelebration } from "./components/MetaCelebration";
 import { FloatingParticles } from "./components/FloatingParticles";
 import Controller from "./components/Controller";
 import { CategorySelection } from "./components/CategorySelection";
@@ -14,15 +15,30 @@ function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [data, setData] = useState<DashboardData>({ teams: [], winningTeam: null });
   const [celebratingSeller, setCelebratingSeller] = useState<RankedSeller | null>(null);
+  const [celebrating300k, setCelebrating300k] = useState<Team300kCelebration | null>(null);
   const [tvName, setTvName] = useState(() => localStorage.getItem('tvName') || "");
   const [tempTvName, setTempTvName] = useState("");
   const [now, setNow] = useState(new Date());
   const [isAudioEnabled, setIsAudioEnabled] = useState(false);
   
   const celebratedSellersRef = useRef<Set<number>>(new Set());
+  const celebrated300kRef = useRef(false);
   const lastSalesRef = useRef<Record<number, number>>({});
   const categoryTeamIdsRef = useRef<Set<number>>(new Set());
   const isFirstLoadRef = useRef(true);
+
+  // Helper: check if "Tropa de Elite" team hit 300k (CLT only)
+  const check300kCelebration = (dashData: DashboardData) => {
+    if (category !== 'CLT' || celebrated300kRef.current) return;
+    const tropaTeam = dashData.teams.find(t =>
+      t.teamName.toLowerCase().includes('tropa') ||
+      t.teamName.toLowerCase().includes('elite')
+    );
+    if (tropaTeam && tropaTeam.totalSales >= 300000) {
+      celebrated300kRef.current = true;
+      setCelebrating300k({ teamName: tropaTeam.teamName, totalSales: tropaTeam.totalSales });
+    }
+  };
 
   // Parse hash routing
   useEffect(() => {
@@ -72,6 +88,7 @@ function App() {
 
         setData(initialData);
         isFirstLoadRef.current = false;
+        // Don't trigger 300k on first load – only on realtime updates
       } catch (err) {
         console.error("Erro ao carregar dados do Supabase:", err);
       }
@@ -113,6 +130,26 @@ function App() {
 
         const newData = await fetchPlacarData(category);
         categoryTeamIdsRef.current = new Set(newData.teams.map(t => t.id));
+
+        // ── Reset celebrações de vendedores cujas vendas caíram abaixo da meta ──
+        // Isso permite que a comemoração dispare novamente após um reset diário
+        newData.teams.forEach(t => {
+          t.sellers.forEach(s => {
+            const goal = s.dailyGoal || t.dailyGoal || newData.settings?.daily_goal || 20000;
+            if (s.sales < goal && celebratedSellersRef.current.has(s.id)) {
+              celebratedSellersRef.current.delete(s.id);
+            }
+          });
+        });
+
+        // ── Reset comemoração 300k se o total do time caiu abaixo de 300k ──
+        const tropaCheck = newData.teams.find(t =>
+          t.teamName.toLowerCase().includes('tropa') ||
+          t.teamName.toLowerCase().includes('elite')
+        );
+        if (tropaCheck && tropaCheck.totalSales < 300000) {
+          celebrated300kRef.current = false;
+        }
         
         if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
            const updatedSeller = payload.new;
@@ -131,6 +168,9 @@ function App() {
            }
         }
         
+        // Check 300k milestone for Tropa de Elite
+        check300kCelebration(newData);
+
         setData(newData);
       })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, async () => {
@@ -393,10 +433,24 @@ function App() {
           </button>
         </div>
         
-        {/* Centro: Título */}
-        <h1 className="text-[clamp(1.5rem,6vh,4rem)] tracking-tighter uppercase font-black bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-teal-200 drop-shadow-[0_2px_10px_rgba(16,185,129,0.3)] leading-none text-center">
-          Placar {category}
-        </h1>
+        {/* Centro: Título + Logo */}
+        <div className="flex items-center gap-4 lg:gap-8">
+          {category === 'CLT' && data.teams.length > 0 && data.teams.some(t => t.isHybridMode) && (
+            <img
+              src={
+                data.teams[0].teamName.toUpperCase() === "TROPA DE ELITE" ? "/img/Logos/Logo Tropa de Elite.png" :
+                data.teams[0].teamName.toUpperCase() === "AGUIAS" ? "/img/Logos/Logo Aguias.png" :
+                data.teams[0].teamName.toUpperCase() === "PATROAS" ? "/img/Logos/Logo Patroas.png" :
+                `/img/Logos/Logo ${data.teams[0].teamName}.png`
+              }
+              alt="Logo Equipe"
+              className="w-16 lg:w-24 h-auto object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]"
+            />
+          )}
+          <h1 className="text-[clamp(1.5rem,6vh,4rem)] tracking-tighter uppercase font-black bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-teal-200 drop-shadow-[0_2px_10px_rgba(16,185,129,0.3)] leading-none text-center">
+            Placar {category}
+          </h1>
+        </div>
 
         {/* Lado Direito: Audio Status */}
         <div className="absolute right-4 lg:right-10">
@@ -428,11 +482,11 @@ function App() {
       </div>
 
       {/* DASHBOARD GRID */}
-      <div className={`relative z-10 flex-1 w-full mx-auto grid gap-4 lg:gap-8 min-h-0 pb-4 ${
-        data.teams.length === 1 ? 'grid-cols-1 max-w-7xl' : 'grid-cols-1 lg:grid-cols-2'
+      <div className={`relative z-10 flex-1 w-full mx-auto grid gap-4 lg:gap-8 min-h-0 pb-4 px-4 lg:px-6 ${
+        data.teams.length === 1 ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'
       }`}>
         {data.teams.map((team) => (
-          <div key={team.id} className="relative min-h-0 flex flex-col rounded-[2.5rem] overflow-hidden glass-panel">
+          <div key={team.id} className="relative min-h-0 h-full flex flex-col rounded-[2.5rem] overflow-hidden glass-panel">
             <TeamBoard 
               teamData={team as any} 
               isWinning={data.winningTeam === team.teamName && data.teams.length > 1} 
@@ -452,7 +506,10 @@ function App() {
       {/* OVERLAY DE COMEMORAÇÃO */}
       <MetaCelebration 
         seller={celebratingSeller} 
-        onFinished={() => setCelebratingSeller(null)} 
+        onFinished={() => setCelebratingSeller(null)}
+        isAudioEnabled={isAudioEnabled}
+        team300k={celebrating300k}
+        onTeam300kFinished={() => setCelebrating300k(null)}
       />
 
       {/* LOGO INFERIOR */}

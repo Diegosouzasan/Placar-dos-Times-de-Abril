@@ -37,6 +37,7 @@ export default function Controller({ category }: ControllerProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [editingSellerGoal, setEditingSellerGoal] = useState<number | null>(null);
   const [showReports, setShowReports] = useState(false);
+  const [selectingHybridForTeam, setSelectingHybridForTeam] = useState<number | null>(null);
 
   useEffect(() => {
     loadData();
@@ -243,7 +244,8 @@ export default function Controller({ category }: ControllerProps) {
     pauseTime: 15,
     cycleStartTime: new Date().toISOString(),
     teamGoals: {} as Record<number, { daily: number, weekly: number }>,
-    sellerGoals: {} as Record<number, number>
+    sellerGoals: {} as Record<number, number>,
+    hybridConfig: {} as Record<number, { active: boolean, dailyGoal: number, weeklyGoal: number, inssSellerIds: number[] }>
   };
   try {
     if (data?.settings?.overlay_url?.startsWith('{')) {
@@ -794,10 +796,39 @@ export default function Controller({ category }: ControllerProps) {
                   
                   <div className="flex flex-col items-end gap-3">
                     <div className="flex flex-col items-end gap-1">
-                      <span className="text-[10px] text-gray-500 font-bold uppercase">Modo Geral</span>
                       <button onClick={() => handleToggleMode(team)} className={`w-12 h-6 rounded-full p-1 transition-colors ${team.isManualMode ? 'bg-blue-600' : 'bg-gray-700'}`} >
                         <div className={`w-4 h-4 bg-white rounded-full transition-transform ${team.isManualMode ? 'translate-x-6' : ''}`} />
                       </button>
+                    </div>
+
+                    {category === 'CLT' && (
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="text-[10px] text-gray-500 font-bold uppercase">Híbrido</span>
+                        <button 
+                          onClick={() => {
+                            if (team.isHybridMode) {
+                              // Se já está ativo, perguntar se quer desligar
+                              if (confirm("Deseja desativar o modo Híbrido deste time? Os vendedores voltarão para o grupo CLT.")) {
+                                const config = (overlayData.hybridConfig && overlayData.hybridConfig[team.id]) || { active: false, dailyGoal: 0, weeklyGoal: 0, inssSellerIds: [] };
+                                saveOverlay({ 
+                                  hybridConfig: { 
+                                    ...(overlayData.hybridConfig || {}), 
+                                    [team.id]: { ...config, active: false } 
+                                  } 
+                                });
+                              }
+                            } else {
+                              // Se está desligado, abrir painel de seleção
+                              setSelectingHybridForTeam(team.id);
+                            }
+                          }} 
+                          className={`flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${team.isHybridMode ? 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.5)]' : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'}`}
+                        >
+                          <Zap className={`w-3 h-3 ${team.isHybridMode ? 'fill-black' : ''}`} />
+                          {team.isHybridMode ? 'Híbrido On' : 'Híbrido Off'}
+                        </button>
+                      </div>
+                    )}
                     </div>
                     
                     {/* METAS INDIVIDUAIS DO TIME */}
@@ -839,147 +870,429 @@ export default function Controller({ category }: ControllerProps) {
                         </div>
                       </div>
                     </div>
-                  </div>
                 </div>
 
-                {team.isManualMode && (
-                  <div className="mb-6 animate-in slide-in-from-top-4 duration-300">
-                     <label className="text-xs text-blue-400 font-bold uppercase mb-2 block">Valor Total da Equipe (Geral)</label>
-                     <input type="text" defaultValue={team.manualTotal > 0 ? team.manualTotal : ""} onBlur={(e) => handleUpdateManualTotal(team.id, e.target.value)} className="w-full bg-black/40 border border-blue-500/30 rounded-xl p-3 text-2xl font-bold focus:outline-none focus:border-blue-500 text-blue-300 transition-all" />
+                {/* MODO DE SELEÇÃO HÍBRIDA */}
+                {selectingHybridForTeam === team.id && (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="mb-8 p-8 bg-amber-500/10 border-2 border-amber-500/30 rounded-3xl shadow-2xl"
+                  >
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center gap-3">
+                        <div className="p-3 bg-amber-500 rounded-2xl">
+                          <Users className="w-6 h-6 text-black" />
+                        </div>
+                        <div>
+                          <h3 className="text-xl font-black uppercase tracking-tight text-amber-500">Configurar Grupo INSS</h3>
+                          <p className="text-xs text-zinc-500 font-bold">Selecione os vendedores que farão parte do grupo INSS deste time.</p>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => setSelectingHybridForTeam(null)}
+                        className="p-2 hover:bg-white/5 rounded-xl text-zinc-500 transition-colors"
+                      >
+                        <X className="w-6 h-6" />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-8">
+                      {team.sellers.map(seller => {
+                        const config = overlayData.hybridConfig[team.id] || { active: false, dailyGoal: 0, weeklyGoal: 0, inssSellerIds: [] };
+                        const isINSS = config.inssSellerIds?.includes(seller.id);
+                        
+                        return (
+                          <button
+                            key={`select-h-${seller.id}`}
+                            onClick={() => {
+                              const currentIds = config.inssSellerIds || [];
+                              const nextIds = isINSS 
+                                ? currentIds.filter(id => id !== seller.id)
+                                : [...currentIds, seller.id];
+                              
+                              saveOverlay({ 
+                                hybridConfig: { 
+                                  ...(overlayData.hybridConfig || {}), 
+                                  [team.id]: { ...config, inssSellerIds: nextIds } 
+                                } 
+                              });
+                            }}
+                            className={`p-4 rounded-2xl border-2 transition-all flex items-center gap-4 text-left ${isINSS ? 'bg-amber-500 border-amber-400 text-black shadow-lg' : 'bg-black/40 border-white/5 text-zinc-400 hover:border-white/10'}`}
+                          >
+                            <img 
+                              src={seller.photoUrl} 
+                              className="w-10 h-10 rounded-xl object-cover border border-black/10" 
+                              alt="" 
+                              onError={(e) => {
+                                const img = e.currentTarget;
+                                if (img.src.includes('ui-avatars')) return;
+                                
+                                // Tentar imagem local pelo primeiro nome
+                                const firstName = seller.name.split(' ')[0];
+                                const localPath = `/img/${firstName}.png`;
+                                
+                                if (img.src !== localPath) {
+                                  img.src = localPath;
+                                } else {
+                                  // Fallback final para avatar
+                                  img.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(seller.name)}&background=3b82f6&color=fff`;
+                                }
+                              }}
+                            />
+                            <span className="font-bold text-sm truncate">{seller.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <button 
+                      onClick={() => {
+                        const config = overlayData.hybridConfig[team.id] || { active: false, dailyGoal: 0, weeklyGoal: 0, inssSellerIds: [] };
+                        saveOverlay({ 
+                          hybridConfig: { 
+                            ...(overlayData.hybridConfig || {}), 
+                            [team.id]: { ...config, active: true } 
+                          } 
+                        });
+                        setSelectingHybridForTeam(null);
+                      }}
+                      className="w-full bg-emerald-600 hover:bg-emerald-500 p-5 rounded-2xl font-black uppercase tracking-widest text-lg transition-all shadow-[0_0_30px_rgba(16,185,129,0.3)]"
+                    >
+                      Concluir Seleção
+                    </button>
+                  </motion.div>
+                )}
+
+                {/* VISÃO HÍBRIDA DIVIDIDA */}
+                {team.isHybridMode && !selectingHybridForTeam && (
+                  <div className="space-y-8 animate-in fade-in zoom-in-95 duration-500">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                      
+                      {/* COLUNA INSS */}
+                      <div className="bg-amber-500/5 border border-amber-500/20 rounded-3xl p-6 relative">
+                        <div className="flex items-center justify-between mb-6">
+                          <div className="flex items-center gap-2">
+                            <Zap className="w-5 h-5 text-amber-500" />
+                            <h3 className="text-lg font-black uppercase tracking-tight text-amber-500">Grupo INSS</h3>
+                          </div>
+                          <button 
+                            onClick={() => setSelectingHybridForTeam(team.id)}
+                            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-amber-500 transition-colors"
+                          >
+                            <Edit3 className="w-3 h-3" /> Editar Equipe
+                          </button>
+                        </div>
+
+                        {/* Metas do Grupo INSS */}
+                        <div className="grid grid-cols-2 gap-4 mb-8">
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest pl-1">Meta Diária (Grupo)</label>
+                            <input 
+                              type="text" 
+                              defaultValue={team.hybridDailyGoal}
+                              onBlur={(e) => {
+                                const config = overlayData.hybridConfig[team.id] || { active: true, dailyGoal: 0, weeklyGoal: 0, inssSellerIds: [] };
+                                saveOverlay({ 
+                                  hybridConfig: { 
+                                    ...(overlayData.hybridConfig || {}), 
+                                    [team.id]: { ...config, dailyGoal: sanitizeNumber(e.target.value) } 
+                                  } 
+                                });
+                              }}
+                              className="w-full bg-black/40 border border-amber-500/20 rounded-xl p-3 text-lg font-black text-amber-500 outline-none focus:border-amber-500/50"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest pl-1">Meta Semanal (Grupo)</label>
+                            <input 
+                              type="text" 
+                              defaultValue={team.hybridWeeklyGoal}
+                              onBlur={(e) => {
+                                const config = overlayData.hybridConfig[team.id] || { active: true, dailyGoal: 0, weeklyGoal: 0, inssSellerIds: [] };
+                                saveOverlay({ 
+                                  hybridConfig: { 
+                                    ...(overlayData.hybridConfig || {}), 
+                                    [team.id]: { ...config, weeklyGoal: sanitizeNumber(e.target.value) } 
+                                  } 
+                                });
+                              }}
+                              className="w-full bg-black/40 border border-amber-500/20 rounded-xl p-3 text-lg font-black text-amber-700 outline-none focus:border-amber-500/50"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Lista de Vendedores INSS */}
+                        <div className="space-y-3">
+                          {team.sellers.filter(s => s.isHybridInss).map(seller => (
+                            <div key={`inss-ctrl-${seller.id}`} className="bg-black/60 rounded-2xl p-4 border border-amber-500/10 flex items-center justify-between gap-4">
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <img 
+                                  src={seller.photoUrl} 
+                                  className="w-10 h-10 rounded-xl object-cover border border-amber-500/20" 
+                                  alt="" 
+                                  onError={(e) => {
+                                    const img = e.currentTarget;
+                                    if (img.src.includes('ui-avatars')) return;
+                                    const firstName = seller.name.split(' ')[0];
+                                    const localPath = `/img/${firstName}.png`;
+                                    if (img.src !== localPath) {
+                                      img.src = localPath;
+                                    } else {
+                                      img.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(seller.name)}&background=f59e0b&color=fff`;
+                                    }
+                                  }}
+                                />
+                                <div className="truncate">
+                                  <p className="font-bold text-sm truncate">{seller.name}</p>
+                                  <div className="flex gap-2 text-[10px] font-mono mt-0.5">
+                                    <span className="text-amber-500">D: R$ {seller.sales.toLocaleString('pt-BR')}</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {editingSellerGoal === seller.id ? (
+                                  <input 
+                                    type="number" autoFocus
+                                    defaultValue={overlayData.sellerGoals?.[seller.id] || ""}
+                                    onBlur={(e) => {
+                                      const val = e.target.value;
+                                      const newGoals = { ...(overlayData.sellerGoals || {}) };
+                                      if (val && parseInt(val) > 0) newGoals[seller.id] = parseInt(val);
+                                      else delete newGoals[seller.id];
+                                      saveOverlay({ sellerGoals: newGoals });
+                                      setEditingSellerGoal(null);
+                                    }}
+                                    className="w-16 bg-amber-500/10 border border-amber-500/50 rounded-lg p-1 text-xs font-bold text-amber-500 outline-none text-right"
+                                  />
+                                ) : (
+                                  <button onClick={() => setEditingSellerGoal(seller.id)} className={`px-2 py-1 rounded-lg text-[10px] font-black ${overlayData.sellerGoals?.[seller.id] ? 'bg-amber-500 text-black' : 'bg-white/5 text-zinc-500'}`}>
+                                    {overlayData.sellerGoals?.[seller.id] ? `${(overlayData.sellerGoals[seller.id]/1000).toFixed(0)}k` : 'Meta'}
+                                  </button>
+                                )}
+                                <button onClick={() => { setEditingSeller(seller.id); setNewValue(seller.sales > 0 ? seller.sales.toString() : ""); }} className="p-2 bg-amber-500/10 rounded-lg text-amber-500 hover:bg-amber-500/20 transition-all"><Plus className="w-4 h-4" /></button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* COLUNA CLT */}
+                      <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-3xl p-6 relative">
+                        <div className="flex items-center gap-2 mb-6">
+                          <Users className="w-5 h-5 text-emerald-500" />
+                          <h3 className="text-lg font-black uppercase tracking-tight text-emerald-500">Grupo CLT</h3>
+                        </div>
+
+                        {/* Metas do Grupo CLT (Editadas no header do card ou aqui também) */}
+                        <div className="grid grid-cols-2 gap-4 mb-8">
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest pl-1">Meta Diária (Grupo)</label>
+                            <input 
+                              type="text" 
+                              defaultValue={overlayData.teamGoals?.[team.id]?.daily ?? data?.settings?.daily_goal ?? 20000}
+                              onBlur={(e) => {
+                                const newGoals = { ...(overlayData.teamGoals || {}) };
+                                newGoals[team.id] = { 
+                                  ...(newGoals[team.id] || { weekly: data?.settings?.weekly_goal || 100000 }), 
+                                  daily: sanitizeNumber(e.target.value) 
+                                };
+                                saveOverlay({ teamGoals: newGoals });
+                              }}
+                              className="w-full bg-black/40 border border-emerald-500/20 rounded-xl p-3 text-lg font-black text-emerald-500 outline-none focus:border-emerald-500/50"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest pl-1">Meta Semanal (Grupo)</label>
+                            <input 
+                              type="text" 
+                              defaultValue={overlayData.teamGoals?.[team.id]?.weekly ?? data?.settings?.weekly_goal ?? 100000}
+                              onBlur={(e) => {
+                                const newGoals = { ...(overlayData.teamGoals || {}) };
+                                newGoals[team.id] = { 
+                                  ...(newGoals[team.id] || { daily: data?.settings?.daily_goal || 20000 }), 
+                                  weekly: sanitizeNumber(e.target.value) 
+                                };
+                                saveOverlay({ teamGoals: newGoals });
+                              }}
+                              className="w-full bg-black/40 border border-emerald-500/20 rounded-xl p-3 text-lg font-black text-emerald-700 outline-none focus:border-emerald-500/50"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Lista de Vendedores CLT */}
+                        <div className="space-y-3">
+                          {team.sellers.filter(s => !s.isHybridInss).map(seller => (
+                            <div key={`clt-ctrl-${seller.id}`} className="bg-black/60 rounded-2xl p-4 border border-emerald-500/10 flex items-center justify-between gap-4">
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <img 
+                                  src={seller.photoUrl} 
+                                  className="w-10 h-10 rounded-xl object-cover border border-emerald-500/20" 
+                                  alt="" 
+                                  onError={(e) => {
+                                    const img = e.currentTarget;
+                                    if (img.src.includes('ui-avatars')) return;
+                                    const firstName = seller.name.split(' ')[0];
+                                    const localPath = `/img/${firstName}.png`;
+                                    if (img.src !== localPath) {
+                                      img.src = localPath;
+                                    } else {
+                                      img.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(seller.name)}&background=10b981&color=fff`;
+                                    }
+                                  }}
+                                />
+                                <div className="truncate">
+                                  <p className="font-bold text-sm truncate">{seller.name}</p>
+                                  <div className="flex gap-2 text-[10px] font-mono mt-0.5">
+                                    <span className="text-emerald-500">D: R$ {seller.sales.toLocaleString('pt-BR')}</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {editingSellerGoal === seller.id ? (
+                                  <input 
+                                    type="number" autoFocus
+                                    defaultValue={overlayData.sellerGoals?.[seller.id] || ""}
+                                    onBlur={(e) => {
+                                      const val = e.target.value;
+                                      const newGoals = { ...(overlayData.sellerGoals || {}) };
+                                      if (val && parseInt(val) > 0) newGoals[seller.id] = parseInt(val);
+                                      else delete newGoals[seller.id];
+                                      saveOverlay({ sellerGoals: newGoals });
+                                      setEditingSellerGoal(null);
+                                    }}
+                                    className="w-16 bg-emerald-500/10 border border-emerald-500/50 rounded-lg p-1 text-xs font-bold text-emerald-500 outline-none text-right"
+                                  />
+                                ) : (
+                                  <button onClick={() => setEditingSellerGoal(seller.id)} className={`px-2 py-1 rounded-lg text-[10px] font-black ${overlayData.sellerGoals?.[seller.id] ? 'bg-emerald-500 text-black' : 'bg-white/5 text-zinc-500'}`}>
+                                    {overlayData.sellerGoals?.[seller.id] ? `${(overlayData.sellerGoals[seller.id]/1000).toFixed(0)}k` : 'Meta'}
+                                  </button>
+                                )}
+                                <button onClick={() => { setEditingSeller(seller.id); setNewValue(seller.sales > 0 ? seller.sales.toString() : ""); }} className="p-2 bg-emerald-500/10 rounded-lg text-emerald-500 hover:bg-emerald-500/20 transition-all"><Plus className="w-4 h-4" /></button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                    </div>
                   </div>
                 )}
 
-                <div className="space-y-4">
-                  <h3 className="text-xs text-gray-500 font-bold uppercase tracking-widest flex items-center gap-2">
-                    <Users className="w-3 h-3" /> Vendedores
-                  </h3>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {team.sellers.map((seller) => (
-                      <div key={seller.id} className="group bg-black/40 rounded-2xl p-4 border border-white/5 hover:border-white/10 transition-all flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-4 flex-1 min-w-0">
-                          <img 
-                            src={seller.photoUrl} 
-                            alt={seller.name} 
-                            className="w-10 h-10 rounded-xl object-cover" 
-                            onError={(e) => {
-                              const img = e.currentTarget;
-                              // Tentar /img/ dinâmico se a URL primária falhar
-                              if (img.src.includes('http') && !img.src.includes('ui-avatars')) {
-                                img.src = `/img/${encodeURIComponent(seller.name.split(' ')[0])}.png`;
-                              } else if (img.src.endsWith('.png')) {
-                                img.src = img.src.replace('.png', '.jpg');
-                              } else {
-                                img.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(seller.name)}&background=3f3f46&color=fff`;
-                              }
-                            }} 
-                          />
-                          <div>
-                            <p className="font-bold text-sm">{seller.name}</p>
-                            <div className="flex gap-2 text-[10px] font-mono leading-none mt-1">
-                               <span className="text-emerald-500">D: R$ {seller.sales.toLocaleString('pt-BR')}</span>
-                               <span className="text-blue-400">S: R$ {(seller.weeklySales || 0).toLocaleString('pt-BR')}</span>
+                {/* VISÃO NORMAL (LISTA FLAT) */}
+                {!team.isHybridMode && !selectingHybridForTeam && (
+                  <>
+                    {team.isManualMode && (
+                      <div className="mb-6 animate-in slide-in-from-top-4 duration-300">
+                         <label className="text-xs text-blue-400 font-bold uppercase mb-2 block">Valor Total da Equipe (Geral)</label>
+                         <input type="text" defaultValue={team.manualTotal > 0 ? team.manualTotal : ""} onBlur={(e) => handleUpdateManualTotal(team.id, e.target.value)} className="w-full bg-black/40 border border-blue-500/30 rounded-xl p-3 text-2xl font-bold focus:outline-none focus:border-blue-500 text-blue-300 transition-all" />
+                      </div>
+                    )}
+
+                    <div className="space-y-4">
+                      <h3 className="text-xs text-gray-500 font-bold uppercase tracking-widest flex items-center gap-2">
+                        <Users className="w-3 h-3" /> Vendedores
+                      </h3>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {team.sellers.map((seller) => (
+                          <div key={seller.id} className="group bg-black/40 rounded-2xl p-4 border border-white/5 hover:border-white/10 transition-all flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-4 flex-1 min-w-0">
+                              <img 
+                                src={seller.photoUrl} 
+                                alt={seller.name} 
+                                className="w-10 h-10 rounded-xl object-cover border border-white/10" 
+                                onError={(e) => {
+                                  const img = e.currentTarget;
+                                  if (img.src.includes('ui-avatars')) return;
+                                  
+                                  const firstName = seller.name.split(' ')[0];
+                                  const localPath = `/img/${firstName}.png`;
+                                  
+                                  if (img.src !== localPath) {
+                                    img.src = localPath;
+                                  } else {
+                                    img.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(seller.name)}&background=3f3f46&color=fff`;
+                                  }
+                                }} 
+                              />
+                              <div>
+                                <p className="font-bold text-sm">{seller.name}</p>
+                                <div className="flex gap-2 text-[10px] font-mono leading-none mt-1">
+                                   <span className="text-emerald-500">D: R$ {seller.sales.toLocaleString('pt-BR')}</span>
+                                   <span className="text-blue-400">S: R$ {(seller.weeklySales || 0).toLocaleString('pt-BR')}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                               {editingSeller === seller.id ? (
+                                  <div className="flex items-center gap-1">
+                                     <input autoFocus type="text" value={newValue} onChange={(e) => setNewValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleUpdateSales(seller.id); }} className="bg-blue-900/40 border border-blue-500/50 rounded-lg p-2 w-28 text-sm outline-none" />
+                                     <button onClick={() => handleUpdateSales(seller.id)} className="p-2 bg-green-600 rounded-lg hover:bg-green-500"><Save className="w-4 h-4" /></button>
+                                     <button onClick={() => setEditingSeller(null)} className="p-2 bg-red-600 rounded-lg hover:bg-red-500"><X className="w-4 h-4" /></button>
+                                  </div>
+                               ) : (
+                                 <>
+                                     {editingSellerGoal === seller.id ? (
+                                       <input 
+                                         type="number" autoFocus
+                                         defaultValue={overlayData.sellerGoals?.[seller.id] || ""}
+                                         onBlur={(e) => {
+                                            const val = e.target.value;
+                                            const newGoals = { ...(overlayData.sellerGoals || {}) };
+                                            if (val && parseInt(val) > 0) newGoals[seller.id] = parseInt(val);
+                                            else delete newGoals[seller.id];
+                                            saveOverlay({ sellerGoals: newGoals });
+                                            setEditingSellerGoal(null);
+                                         }}
+                                         className="w-20 bg-yellow-500/10 border border-yellow-500/50 rounded-lg p-1 text-xs font-bold text-yellow-500 outline-none text-right"
+                                       />
+                                     ) : (
+                                       <button onClick={() => setEditingSellerGoal(seller.id)} className={`p-2 rounded-xl transition-all ${overlayData.sellerGoals?.[seller.id] ? 'bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30' : 'hover:bg-white/5 text-zinc-500'}`}>
+                                          <span className="text-[10px] font-black">{overlayData.sellerGoals?.[seller.id] ? `${(overlayData.sellerGoals[seller.id]/1000).toFixed(0)}k` : 'Meta'}</span>
+                                       </button>
+                                     )}
+                                    <button onClick={() => { setEditingSeller(seller.id); setNewValue(seller.sales > 0 ? seller.sales.toString() : ""); }} className="p-2 hover:bg-white/5 rounded-xl text-blue-400" ><Plus className="w-4 h-4" /></button>
+                                    <button onClick={() => otherTeam && handleMoveSeller(seller.id, team.id, otherTeam.id)} className="p-2 hover:bg-white/5 rounded-xl text-yellow-400" ><ArrowLeftRight className="w-4 h-4" /></button>
+                                    <button onClick={() => handleDeleteSeller(seller.id)} className="p-2 hover:bg-white/5 rounded-xl text-red-500" ><Trash2 className="w-4 h-4" /></button>
+                                 </>
+                               )}
                             </div>
                           </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                           {editingSeller === seller.id ? (
-                              <div className="flex items-center gap-1">
-                                 <input autoFocus type="text" value={newValue} onChange={(e) => setNewValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleUpdateSales(seller.id); }} className="bg-blue-900/40 border border-blue-500/50 rounded-lg p-2 w-28 text-sm outline-none" />
-                                 <button onClick={() => handleUpdateSales(seller.id)} className="p-2 bg-green-600 rounded-lg hover:bg-green-500"><Save className="w-4 h-4" /></button>
-                                 <button onClick={() => setEditingSeller(null)} className="p-2 bg-red-600 rounded-lg hover:bg-red-500"><X className="w-4 h-4" /></button>
-                              </div>
-                           ) : (
-                             <>
-                                 {editingSellerGoal === seller.id ? (
-                                   <input 
-                                     type="number"
-                                     autoFocus
-                                     placeholder="Meta"
-                                     defaultValue={overlayData.sellerGoals?.[seller.id] || ""}
-                                     onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                           const val = (e.target as HTMLInputElement).value;
-                                           const newGoals = { ...(overlayData.sellerGoals || {}) };
-                                           if (val && parseInt(val) > 0) newGoals[seller.id] = parseInt(val);
-                                           else delete newGoals[seller.id];
-                                           saveOverlay({ sellerGoals: newGoals });
-                                           setEditingSellerGoal(null);
-                                        }
-                                        if (e.key === 'Escape') setEditingSellerGoal(null);
-                                     }}
-                                     onBlur={(e) => {
-                                        const val = e.target.value;
-                                        const newGoals = { ...(overlayData.sellerGoals || {}) };
-                                        if (val && parseInt(val) > 0) newGoals[seller.id] = parseInt(val);
-                                        else delete newGoals[seller.id];
-                                        saveOverlay({ sellerGoals: newGoals });
-                                        setEditingSellerGoal(null);
-                                     }}
-                                     className="w-20 bg-yellow-500/10 border border-yellow-500/50 rounded-lg p-1 text-xs font-bold text-yellow-500 outline-none text-right"
-                                   />
-                                 ) : (
-                                   <button 
-                                     onClick={() => setEditingSellerGoal(seller.id)} 
-                                     className={`p-2 rounded-xl transition-all ${overlayData.sellerGoals?.[seller.id] ? 'bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30' : 'hover:bg-white/5 text-zinc-500'}`}
-                                     title="Definir Meta Individual"
-                                   >
-                                      <span className="text-[10px] font-black">{overlayData.sellerGoals?.[seller.id] ? `${(overlayData.sellerGoals[seller.id]/1000).toFixed(0)}k` : 'Meta'}</span>
-                                   </button>
-                                 )}
-                                <button onClick={() => { setEditingSeller(seller.id); setNewValue(seller.sales > 0 ? seller.sales.toString() : ""); }} className="p-2 hover:bg-white/5 rounded-xl text-blue-400 transition-opacity" ><Plus className="w-4 h-4" /></button>
-                                <button onClick={() => otherTeam && handleMoveSeller(seller.id, team.id, otherTeam.id)} className="p-2 hover:bg-white/5 rounded-xl text-yellow-400 transition-opacity" ><ArrowLeftRight className="w-4 h-4" /></button>
-                                <button onClick={() => handleDeleteSeller(seller.id)} className="p-2 hover:bg-white/5 rounded-xl text-red-500 transition-opacity" ><Trash2 className="w-4 h-4" /></button>
-                             </>
-                           )}
-                        </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
 
-                  <button onClick={() => setSelectedTeamForNewSeller(team.id)} className="w-full border border-dashed border-white/10 p-4 rounded-2xl hover:bg-white/5 hover:border-white/20 transition-all text-sm text-gray-400 font-medium flex items-center justify-center gap-2" >
-                    <Plus className="w-4 h-4" /> Adicionar Vendedor
-                  </button>
-
-                  {selectedTeamForNewSeller === team.id && (
-                    <div className="bg-blue-600/10 border border-blue-600/30 rounded-2xl p-4 mt-4 space-y-4">
-                       <div className="space-y-2">
-                          <label className="text-[10px] text-blue-400 font-bold uppercase tracking-widest pl-1">Nome Completo</label>
-                          <input autoFocus type="text" placeholder="Nome do Vendedor" value={newSellerName} onChange={(e) => setNewSellerName(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-sm focus:border-blue-500/50 outline-none" />
-                       </div>
-
-                       <div className="space-y-2">
-                          <label className="text-[10px] text-blue-400 font-bold uppercase tracking-widest pl-1">Foto do Vendedor</label>
-                          <div className="relative border border-white/10 rounded-xl p-3 bg-black/40 flex items-center gap-3">
-                             <input 
-                               type="file" 
-                               accept="image/*"
-                               onChange={(e) => setNewSellerPhoto(e.target.files?.[0] || null)}
-                               className="absolute inset-0 opacity-0 cursor-pointer"
-                             />
-                             <div className="p-2 bg-white/5 rounded-lg">
-                                <ImageIcon className="w-4 h-4 text-gray-400" />
-                             </div>
-                             <span className="text-xs text-gray-500 truncate">
-                                {newSellerPhoto ? newSellerPhoto.name : "Selecionar imagem..."}
-                             </span>
-                          </div>
-                       </div>
-
-                       <div className="flex gap-2 pt-2">
-                          <button 
-                            disabled={isUploading}
-                            onClick={() => handleAddSeller(team.id)} 
-                            className="flex-1 bg-blue-600 hover:bg-blue-500 p-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
-                          >
-                             {isUploading ? 'Enviando...' : 'Criar Vendedor'}
-                          </button>
-                          <button onClick={() => { setSelectedTeamForNewSeller(null); setNewSellerPhoto(null); }} className="p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all"><X className="w-5 h-5" /></button>
-                       </div>
+                      <button onClick={() => setSelectedTeamForNewSeller(team.id)} className="w-full border border-dashed border-white/10 p-4 rounded-2xl hover:bg-white/5 hover:border-white/20 transition-all text-sm text-gray-400 font-medium flex items-center justify-center gap-2" >
+                        <Plus className="w-4 h-4" /> Adicionar Vendedor
+                      </button>
                     </div>
-                  )}
-                </div>
+                  </>
+                )}
+
+                {/* MODAL ADICIONAR VENDEDOR (GLOBAL PARA O TIME) */}
+                {selectedTeamForNewSeller === team.id && (
+                  <div className="bg-blue-600/10 border border-blue-600/30 rounded-2xl p-4 mt-4 space-y-4">
+                     <div className="space-y-2">
+                        <label className="text-[10px] text-blue-400 font-bold uppercase tracking-widest pl-1">Nome Completo</label>
+                        <input autoFocus type="text" placeholder="Nome do Vendedor" value={newSellerName} onChange={(e) => setNewSellerName(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-sm focus:border-blue-500/50 outline-none" />
+                     </div>
+
+                     <div className="space-y-2">
+                        <label className="text-[10px] text-blue-400 font-bold uppercase tracking-widest pl-1">Foto do Vendedor</label>
+                        <div className="relative border border-white/10 rounded-xl p-3 bg-black/40 flex items-center gap-3">
+                           <input type="file" accept="image/*" onChange={(e) => setNewSellerPhoto(e.target.files?.[0] || null)} className="absolute inset-0 opacity-0 cursor-pointer" />
+                           <div className="p-2 bg-white/5 rounded-lg"><ImageIcon className="w-4 h-4 text-gray-400" /></div>
+                           <span className="text-xs text-gray-500 truncate">{newSellerPhoto ? newSellerPhoto.name : "Selecionar imagem..."}</span>
+                        </div>
+                     </div>
+
+                     <div className="flex gap-2 pt-2">
+                        <button disabled={isUploading} onClick={() => handleAddSeller(team.id)} className="flex-1 bg-blue-600 hover:bg-blue-500 p-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50">{isUploading ? 'Enviando...' : 'Criar Vendedor'}</button>
+                        <button onClick={() => { setSelectedTeamForNewSeller(null); setNewSellerPhoto(null); }} className="p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all"><X className="w-5 h-5" /></button>
+                     </div>
+                  </div>
+                )}
               </div>
             );
           })}

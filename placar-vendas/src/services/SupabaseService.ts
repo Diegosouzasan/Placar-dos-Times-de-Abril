@@ -9,6 +9,7 @@ export interface RankedSeller {
   weeklySales: number;
   photoUrl: string;
   dailyGoal?: number; // Meta individual opcional
+  isHybridInss?: boolean; // Se pertence ao subgrupo INSS no modo híbrido
 }
 
 export interface TeamData {
@@ -25,6 +26,9 @@ export interface TeamData {
   dailyGoal: number;
   weeklyGoal: number;
   sellers: RankedSeller[];
+  isHybridMode?: boolean;
+  hybridDailyGoal?: number;
+  hybridWeeklyGoal?: number;
 }
 
 export interface DashboardData {
@@ -82,6 +86,13 @@ export async function fetchPlacarData(category: string): Promise<DashboardData> 
 
   // 4. Assemble Dashboard Data
   const teams: TeamData[] = teamsData.map((t: any) => {
+    // Parse hybrid settings
+    const hybridTeamConfig = overlayData.hybridConfig?.[t.id];
+    const isHybridMode = hybridTeamConfig?.active || false;
+    const hybridDailyGoal = hybridTeamConfig?.dailyGoal || 0;
+    const hybridWeeklyGoal = hybridTeamConfig?.weeklyGoal || 0;
+    const inssSellerIds = hybridTeamConfig?.inssSellerIds || [];
+
     const teamSellers = sellersData
       .filter((s: any) => s.team_id === t.id)
       .map((s: any) => {
@@ -95,7 +106,8 @@ export async function fetchPlacarData(category: string): Promise<DashboardData> 
           sales: Number(s.total_sales),
           weeklySales: Number(s.weekly_sales || 0),
           photoUrl: s.photo_url || `/img/${encodeURIComponent(s.name.split(" ")[0])}.png`,
-          dailyGoal: individualGoal ? Number(individualGoal) : undefined
+          dailyGoal: individualGoal ? Number(individualGoal) : undefined,
+          isHybridInss: inssSellerIds.includes(s.id)
         };
       });
 
@@ -124,7 +136,10 @@ export async function fetchPlacarData(category: string): Promise<DashboardData> 
       manualTotal: Number(t.manual_total),
       dailyGoal: teamDailyGoal,
       weeklyGoal: teamWeeklyGoal,
-      sellers: teamSellers
+      sellers: teamSellers,
+      isHybridMode,
+      hybridDailyGoal,
+      hybridWeeklyGoal
     };
   });
 
