@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { 
   fetchPlacarData, 
@@ -12,10 +12,14 @@ import {
   resetDailySales,
   uploadFile,
   updateTeam,
+  startLunchBreak,
+  stopLunchBreak,
+  fetchActiveLunchBreaks,
   type DashboardData,
-  type TeamData
+  type TeamData,
+  type LunchBreakRecord
 } from '../services/SupabaseService';
-import { Plus, Trash2, Users, ArrowLeftRight, Save, X, Zap, Monitor, CheckCircle2, RotateCcw, Upload, Image as ImageIcon, ChevronLeft, Edit3, ChevronDown, Minus, BarChart } from 'lucide-react';
+import { Plus, Trash2, Users, ArrowLeftRight, Save, X, Zap, Monitor, CheckCircle2, RotateCcw, Upload, Image as ImageIcon, ChevronLeft, Edit3, ChevronDown, Minus, BarChart, Clock } from 'lucide-react';
 import Reports from './Reports';
 
 import { motion, AnimatePresence } from 'framer-motion';
@@ -38,6 +42,66 @@ export default function Controller({ category }: ControllerProps) {
   const [editingSellerGoal, setEditingSellerGoal] = useState<number | null>(null);
   const [showReports, setShowReports] = useState(false);
   const [selectingHybridForTeam, setSelectingHybridForTeam] = useState<number | null>(null);
+  // Lunch break timer state
+  const [activeBreaks, setActiveBreaks] = useState<Record<number, LunchBreakRecord>>({});
+  const [timerTick, setTimerTick] = useState(0);
+  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Tick timer every second to update elapsed display
+  useEffect(() => {
+    timerIntervalRef.current = setInterval(() => {
+      setTimerTick(t => t + 1);
+    }, 1000);
+    return () => {
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    };
+  }, []);
+
+  // Load active lunch breaks on mount
+  useEffect(() => {
+    fetchActiveLunchBreaks().then(records => {
+      const map: Record<number, LunchBreakRecord> = {};
+      records.forEach(r => { map[r.seller_id] = r; });
+      setActiveBreaks(map);
+    }).catch(console.error);
+  }, []);
+
+  // Format seconds as HH:MM:SS
+  const formatElapsed = useCallback((startedAt: string): string => {
+    const elapsed = Math.round((Date.now() - new Date(startedAt).getTime()) / 1000);
+    const h = Math.floor(elapsed / 3600);
+    const m = Math.floor((elapsed % 3600) / 60);
+    const s = elapsed % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }, [timerTick]);
+
+  const handleStartLunchBreak = async (sellerId: number) => {
+    try {
+      const record = await startLunchBreak(sellerId);
+      if (record) {
+        setActiveBreaks(prev => ({ ...prev, [sellerId]: record }));
+      }
+    } catch (error) {
+      console.error('Erro ao iniciar lanche:', error);
+      alert('Erro ao iniciar temporizador de lanche.');
+    }
+  };
+
+  const handleStopLunchBreak = async (sellerId: number) => {
+    const breakRecord = activeBreaks[sellerId];
+    if (!breakRecord) return;
+    try {
+      await stopLunchBreak(breakRecord.id);
+      setActiveBreaks(prev => {
+        const next = { ...prev };
+        delete next[sellerId];
+        return next;
+      });
+    } catch (error) {
+      console.error('Erro ao parar lanche:', error);
+      alert('Erro ao parar temporizador de lanche.');
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -1071,6 +1135,25 @@ export default function Controller({ category }: ControllerProps) {
                                   </button>
                                 )}
                                 <button onClick={() => { setEditingSeller(seller.id); setNewValue(seller.sales > 0 ? seller.sales.toString() : ""); }} className="p-2 bg-amber-500/10 rounded-lg text-amber-500 hover:bg-amber-500/20 transition-all"><Plus className="w-4 h-4" /></button>
+                                {/* Lunch Break Timer Button - Hybrid INSS */}
+                                {activeBreaks[seller.id] ? (
+                                  <button
+                                    onClick={() => handleStopLunchBreak(seller.id)}
+                                    title={`Parar lanche (${formatElapsed(activeBreaks[seller.id].started_at)})`}
+                                    className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-orange-500/20 border border-orange-500/40 text-orange-400 animate-pulse hover:bg-orange-500/30 transition-all"
+                                  >
+                                    <Clock className="w-3.5 h-3.5" />
+                                    <span className="text-[10px] font-mono font-bold">{formatElapsed(activeBreaks[seller.id].started_at)}</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => handleStartLunchBreak(seller.id)}
+                                    title="Iniciar temporizador de lanche"
+                                    className="p-2 rounded-lg text-zinc-500 hover:text-orange-400 hover:bg-orange-500/10 transition-all"
+                                  >
+                                    <Clock className="w-4 h-4" />
+                                  </button>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -1169,6 +1252,25 @@ export default function Controller({ category }: ControllerProps) {
                                   </button>
                                 )}
                                 <button onClick={() => { setEditingSeller(seller.id); setNewValue(seller.sales > 0 ? seller.sales.toString() : ""); }} className="p-2 bg-emerald-500/10 rounded-lg text-emerald-500 hover:bg-emerald-500/20 transition-all"><Plus className="w-4 h-4" /></button>
+                                {/* Lunch Break Timer Button - Hybrid CLT */}
+                                {activeBreaks[seller.id] ? (
+                                  <button
+                                    onClick={() => handleStopLunchBreak(seller.id)}
+                                    title={`Parar lanche (${formatElapsed(activeBreaks[seller.id].started_at)})`}
+                                    className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-orange-500/20 border border-orange-500/40 text-orange-400 animate-pulse hover:bg-orange-500/30 transition-all"
+                                  >
+                                    <Clock className="w-3.5 h-3.5" />
+                                    <span className="text-[10px] font-mono font-bold">{formatElapsed(activeBreaks[seller.id].started_at)}</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => handleStartLunchBreak(seller.id)}
+                                    title="Iniciar temporizador de lanche"
+                                    className="p-2 rounded-lg text-zinc-500 hover:text-orange-400 hover:bg-orange-500/10 transition-all"
+                                  >
+                                    <Clock className="w-4 h-4" />
+                                  </button>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -1254,6 +1356,25 @@ export default function Controller({ category }: ControllerProps) {
                                        </button>
                                      )}
                                     <button onClick={() => { setEditingSeller(seller.id); setNewValue(seller.sales > 0 ? seller.sales.toString() : ""); }} className="p-2 hover:bg-white/5 rounded-xl text-blue-400" ><Plus className="w-4 h-4" /></button>
+                                    {/* Lunch Break Timer Button */}
+                                    {activeBreaks[seller.id] ? (
+                                      <button
+                                        onClick={() => handleStopLunchBreak(seller.id)}
+                                        title={`Parar lanche (${formatElapsed(activeBreaks[seller.id].started_at)})`}
+                                        className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-orange-500/20 border border-orange-500/40 text-orange-400 animate-pulse hover:bg-orange-500/30 transition-all"
+                                      >
+                                        <Clock className="w-3.5 h-3.5" />
+                                        <span className="text-[10px] font-mono font-bold">{formatElapsed(activeBreaks[seller.id].started_at)}</span>
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleStartLunchBreak(seller.id)}
+                                        title="Iniciar temporizador de lanche"
+                                        className="p-2 hover:bg-white/5 rounded-xl text-zinc-500 hover:text-orange-400 transition-colors"
+                                      >
+                                        <Clock className="w-4 h-4" />
+                                      </button>
+                                    )}
                                     <button onClick={() => otherTeam && handleMoveSeller(seller.id, team.id, otherTeam.id)} className="p-2 hover:bg-white/5 rounded-xl text-yellow-400" ><ArrowLeftRight className="w-4 h-4" /></button>
                                     <button onClick={() => handleDeleteSeller(seller.id)} className="p-2 hover:bg-white/5 rounded-xl text-red-500" ><Trash2 className="w-4 h-4" /></button>
                                  </>

@@ -435,3 +435,89 @@ export async function checkAndRunMonthlySync() {
   }
   return null;
 }
+
+// ============================================================
+// LUNCH BREAK (Temporizador de Lanche)
+// ============================================================
+
+export interface LunchBreakRecord {
+  id: string;
+  seller_id: number;
+  started_at: string;
+  ended_at: string | null;
+  duration_seconds: number;
+}
+
+/** Inicia um novo intervalo de lanche para o vendedor */
+export async function startLunchBreak(sellerId: number): Promise<LunchBreakRecord | null> {
+  const { data, error } = await supabase
+    .from("lunch_breaks")
+    .insert({
+      seller_id: sellerId,
+      started_at: new Date().toISOString(),
+      ended_at: null,
+      duration_seconds: 0
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+/** Para o intervalo de lanche ativo (calcula duração) */
+export async function stopLunchBreak(breakId: string): Promise<void> {
+  const now = new Date();
+
+  // Buscar o registro para calcular a duração
+  const { data: breakRecord, error: fetchError } = await supabase
+    .from("lunch_breaks")
+    .select("started_at")
+    .eq("id", breakId)
+    .single();
+
+  if (fetchError) throw fetchError;
+
+  const startedAt = new Date(breakRecord.started_at);
+  const durationSeconds = Math.round((now.getTime() - startedAt.getTime()) / 1000);
+
+  const { error } = await supabase
+    .from("lunch_breaks")
+    .update({
+      ended_at: now.toISOString(),
+      duration_seconds: durationSeconds
+    })
+    .eq("id", breakId);
+
+  if (error) throw error;
+}
+
+/** Busca todos os intervalos ativos (ended_at IS NULL) */
+export async function fetchActiveLunchBreaks(): Promise<LunchBreakRecord[]> {
+  const { data, error } = await supabase
+    .from("lunch_breaks")
+    .select("*")
+    .is("ended_at", null);
+
+  if (error) throw error;
+  return data || [];
+}
+
+/** Busca histórico de intervalos de lanche no período */
+export async function fetchLunchBreakHistory(startDate?: string, endDate?: string): Promise<LunchBreakRecord[]> {
+  let query = supabase
+    .from("lunch_breaks")
+    .select("*")
+    .order('started_at', { ascending: false });
+
+  if (startDate) {
+    query = query.gte('started_at', `${startDate}T00:00:00.000Z`);
+  }
+  if (endDate) {
+    query = query.lte('started_at', `${endDate}T23:59:59.999Z`);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+}

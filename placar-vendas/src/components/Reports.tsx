@@ -6,7 +6,8 @@ import {
 } from 'recharts';
 import * as XLSX from 'xlsx';
 import { format, parseISO } from 'date-fns';
-import { Download, Filter, ArrowLeft, RefreshCw, TrendingUp, DollarSign, Calendar, BarChart3, X, User, Activity, CloudUpload, History } from 'lucide-react';
+import { Download, Filter, ArrowLeft, RefreshCw, TrendingUp, DollarSign, Calendar, BarChart3, X, User, Activity, CloudUpload, History, Clock } from 'lucide-react';
+import LunchBreakReport from './LunchBreakReport';
 
 export default function Reports({ onBack }: { onBack: () => void }) {
   const [rawData, setRawData] = useState<any[]>([]);
@@ -16,6 +17,7 @@ export default function Reports({ onBack }: { onBack: () => void }) {
   const [selectedSellerForReport, setSelectedSellerForReport] = useState<any>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'vendas' | 'lanche'>('vendas');
 
   // Filters
   const [startDate, setStartDate] = useState<string>(() => {
@@ -252,6 +254,38 @@ export default function Reports({ onBack }: { onBack: () => void }) {
           </div>
         </div>
 
+        {/* Tab Navigation */}
+        <div className="flex gap-1 bg-white/5 border border-white/10 rounded-2xl p-1.5 w-fit">
+          <button
+            onClick={() => setActiveTab('vendas')}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+              activeTab === 'vendas'
+                ? 'bg-emerald-500 text-black shadow-[0_0_15px_rgba(16,185,129,0.4)]'
+                : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" /> Vendas
+          </button>
+          <button
+            onClick={() => setActiveTab('lanche')}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+              activeTab === 'lanche'
+                ? 'bg-orange-500 text-black shadow-[0_0_15px_rgba(249,115,22,0.4)]'
+                : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Clock className="w-4 h-4" /> Tempo de Lanche
+          </button>
+        </div>
+
+        {/* Lanche Tab Content */}
+        {activeTab === 'lanche' && (
+          <LunchBreakReport allTeams={allTeams} allSellers={allSellers} />
+        )}
+
+        {/* Vendas Tab Content */}
+        {activeTab === 'vendas' && (
+        <>
         {/* Filters */}
         <div className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-xl shadow-2xl">
           <div className="flex items-center gap-2 mb-4 text-emerald-400 font-bold">
@@ -530,6 +564,8 @@ export default function Reports({ onBack }: { onBack: () => void }) {
             </div>
           )}
         </AnimatePresence>
+        </>
+        )}
       </div>
     </div>
   );
