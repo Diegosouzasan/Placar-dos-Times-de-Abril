@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
-import { fetchLunchBreakHistory, type LunchBreakRecord } from '../services/SupabaseService';
+import { fetchLunchBreakHistory, updateLunchBreakDuration, type LunchBreakRecord } from '../services/SupabaseService';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as XLSX from 'xlsx';
 import { format, parseISO, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
-import { Download, Filter, RefreshCw, Clock, ChevronDown, ChevronUp, BarChart3, Calendar } from 'lucide-react';
+import { Download, Filter, RefreshCw, Clock, ChevronDown, ChevronUp, BarChart3, Calendar, Edit2 } from 'lucide-react';
+import { WheelPicker } from './WheelPicker';
 
 interface LunchBreakReportProps {
   allTeams: any[];
@@ -26,6 +27,11 @@ export default function LunchBreakReport({ allTeams, allSellers }: LunchBreakRep
   const [rawBreaks, setRawBreaks] = useState<LunchBreakRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedSellers, setExpandedSellers] = useState<Set<number>>(new Set());
+
+  // Edit Modal State
+  const [editingBreak, setEditingBreak] = useState<LunchBreakRecord | null>(null);
+  const [editMinutes, setEditMinutes] = useState(0);
+  const [editSeconds, setEditSeconds] = useState(0);
 
   // Filters
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -156,6 +162,31 @@ export default function LunchBreakReport({ allTeams, allSellers }: LunchBreakRep
       else next.add(id);
       return next;
     });
+  };
+
+  const handleEditBreak = (b: LunchBreakRecord) => {
+    if (!b.ended_at) {
+      alert("Não é possível editar um intervalo em andamento.");
+      return;
+    }
+    const currentTotalSeconds = b.duration_seconds || 0;
+    setEditMinutes(Math.floor(currentTotalSeconds / 60));
+    setEditSeconds(currentTotalSeconds % 60);
+    setEditingBreak(b);
+  };
+
+  const saveEditedBreak = async () => {
+    if (!editingBreak) return;
+    const newTotalSeconds = (editMinutes * 60) + editSeconds;
+    
+    try {
+      await updateLunchBreakDuration(editingBreak.id, newTotalSeconds);
+      setEditingBreak(null);
+      loadData();
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao atualizar o tempo do intervalo.');
+    }
   };
 
   const exportToExcel = () => {
@@ -422,6 +453,15 @@ export default function LunchBreakReport({ allTeams, allSellers }: LunchBreakRep
                                         <span className="text-zinc-600">→</span>
                                         <span className="text-zinc-300">{b.ended_at ? format(parseISO(b.ended_at), 'HH:mm') : '...'}</span>
                                         <span className="text-orange-400 font-bold ml-1">({formatDurationMinutes(b.duration_seconds)})</span>
+                                        {b.ended_at && (
+                                          <button 
+                                            onClick={(e) => { e.stopPropagation(); handleEditBreak(b); }}
+                                            className="ml-1 text-zinc-500 hover:text-orange-400 transition-colors p-1 rounded-md hover:bg-orange-400/10"
+                                            title="Editar Tempo"
+                                          >
+                                            <Edit2 className="w-3 h-3" />
+                                          </button>
+                                        )}
                                       </div>
                                     ))}
                                   </div>
@@ -439,6 +479,65 @@ export default function LunchBreakReport({ allTeams, allSellers }: LunchBreakRep
           )}
         </div>
       )}
+
+      {/* Modal de Edição de Tempo (Wheel Picker) */}
+      <AnimatePresence>
+        {editingBreak && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+              onClick={() => setEditingBreak(null)}
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative bg-[#0a0a0a] border border-white/10 rounded-3xl p-8 shadow-2xl w-full max-w-sm"
+            >
+              <h3 className="text-2xl font-black text-white mb-2 text-center uppercase tracking-wider">Editar Tempo</h3>
+              <p className="text-zinc-400 text-xs text-center mb-6 font-medium">
+                Intervalo de {format(parseISO(editingBreak.started_at), 'HH:mm')}
+              </p>
+
+              <div className="flex items-center justify-center gap-6 mb-8 bg-black/50 p-6 rounded-2xl border border-white/5">
+                <WheelPicker 
+                  value={editMinutes}
+                  onChange={setEditMinutes}
+                  min={0}
+                  max={240}
+                  label="MIN"
+                />
+                <div className="text-3xl font-black text-orange-500 mb-8 animate-pulse">:</div>
+                <WheelPicker 
+                  value={editSeconds}
+                  onChange={setEditSeconds}
+                  min={0}
+                  max={59}
+                  label="SEG"
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setEditingBreak(null)}
+                  className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-zinc-300 rounded-xl font-bold transition-colors border border-white/10 text-sm uppercase tracking-widest"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={saveEditedBreak}
+                  className="flex-1 py-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-black rounded-xl font-black transition-colors shadow-[0_0_20px_rgba(249,115,22,0.3)] text-sm uppercase tracking-widest"
+                >
+                  Salvar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

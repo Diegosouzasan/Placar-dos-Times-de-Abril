@@ -492,6 +492,30 @@ export async function stopLunchBreak(breakId: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Edita a duração de um intervalo de lanche já registrado */
+export async function updateLunchBreakDuration(breakId: string, newDurationSeconds: number): Promise<void> {
+  const { data: breakRecord, error: fetchError } = await supabase
+    .from("lunch_breaks")
+    .select("started_at")
+    .eq("id", breakId)
+    .single();
+
+  if (fetchError) throw fetchError;
+
+  const startedAt = new Date(breakRecord.started_at);
+  const newEndedAt = new Date(startedAt.getTime() + newDurationSeconds * 1000);
+
+  const { error } = await supabase
+    .from("lunch_breaks")
+    .update({
+      duration_seconds: newDurationSeconds,
+      ended_at: newEndedAt.toISOString()
+    })
+    .eq("id", breakId);
+
+  if (error) throw error;
+}
+
 /** Busca todos os intervalos ativos (ended_at IS NULL) */
 export async function fetchActiveLunchBreaks(): Promise<LunchBreakRecord[]> {
   const { data, error } = await supabase

@@ -28,6 +28,8 @@ interface ControllerProps {
   category: 'INSS' | 'CLT';
 }
 
+import { WheelPicker } from './WheelPicker';
+
 export default function Controller({ category }: ControllerProps) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,9 +48,22 @@ export default function Controller({ category }: ControllerProps) {
   const [activeBreaks, setActiveBreaks] = useState<Record<number, LunchBreakRecord>>({});
   const [timerTick, setTimerTick] = useState(0);
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [silencedAlerts, setSilencedAlerts] = useState<Set<number>>(new Set());
+  const [lunchAlertSellers, setLunchAlertSellers] = useState<{ id: number, name: string, elapsedMs: number }[]>([]);
+  const alarmStartTimesRef = useRef<Map<number, number>>(new Map());
+  
+  // Wheel picker local states
+  const [lunchMins, setLunchMins] = useState(60);
+  const [lunchSecs, setLunchSecs] = useState(0);
+
+  const audioAlarmRef = useRef<HTMLAudioElement | null>(null);
 
   // Tick timer every second to update elapsed display
   useEffect(() => {
+    audioAlarmRef.current = new Audio('/audio-alert.mp3');
+    if (audioAlarmRef.current) {
+      audioAlarmRef.current.loop = true;
+    }
     timerIntervalRef.current = setInterval(() => {
       setTimerTick(t => t + 1);
     }, 1000);
@@ -97,11 +112,105 @@ export default function Controller({ category }: ControllerProps) {
         delete next[sellerId];
         return next;
       });
+      setSilencedAlerts(prev => {
+         const next = new Set(prev);
+         next.delete(sellerId);
+         return next;
+      });
+      alarmStartTimesRef.current.delete(sellerId);
     } catch (error) {
       console.error('Erro ao parar lanche:', error);
       alert('Erro ao parar temporizador de lanche.');
     }
   };
+
+  useEffect(() => {
+    if (!data?.settings?.overlay_url) return;
+    try {
+      if (data.settings.overlay_url.startsWith('{')) {
+        const parsed = JSON.parse(data.settings.overlay_url);
+        let seconds = 3600;
+        if (parsed.defaultLunchTimeSeconds !== undefined) {
+           seconds = parsed.defaultLunchTimeSeconds;
+        } else if (parsed.defaultLunchTime !== undefined) {
+           seconds = parsed.defaultLunchTime * 60;
+        }
+        setLunchMins(Math.floor(seconds / 60));
+        setLunchSecs(seconds % 60);
+      }
+    } catch(e) {}
+  }, [data?.settings?.overlay_url]);
+
+  useEffect(() => {
+    if (!data?.teams) return;
+    
+    let defaultLunchTimeSeconds = 3600;
+    try {
+      if (data?.settings?.overlay_url?.startsWith('{')) {
+        const parsed = JSON.parse(data.settings.overlay_url);
+        if (parsed.defaultLunchTimeSeconds !== undefined) {
+           defaultLunchTimeSeconds = parsed.defaultLunchTimeSeconds;
+        } else if (parsed.defaultLunchTime !== undefined) {
+           defaultLunchTimeSeconds = parsed.defaultLunchTime * 60;
+        }
+      }
+    } catch(e) {}
+
+    const defaultLunchTimeMs = defaultLunchTimeSeconds * 1000;
+    const newAlerts: { id: number, name: string, elapsedMs: number }[] = [];
+    let hasNewAlertsToSound = false;
+    const now = Date.now();
+    const FIVE_MINUTES_MS = 5 * 60 * 1000;
+
+    Object.values(activeBreaks).forEach(record => {
+       const elapsedMs = now - new Date(record.started_at).getTime();
+       if (elapsedMs >= defaultLunchTimeMs) {
+          const seller = data.teams.flatMap(t => t.sellers).find(s => s.id === record.seller_id);
+          if (seller) {
+             // Sempre entra no alerta visual (newAlerts) para não sumir o banner ao silenciar
+             newAlerts.push({ id: seller.id, name: seller.name, elapsedMs });
+             
+             if (!silencedAlerts.has(record.seller_id)) {
+                 let startTime = alarmStartTimesRef.current.get(record.seller_id);
+                 if (!startTime) {
+                     // Primeiro alerta deste vendedor neste ciclo
+                     startTime = now;
+                     alarmStartTimesRef.current.set(record.seller_id, startTime);
+                     
+                     // Notificação Nativa
+                     if (Notification.permission === 'granted') {
+                       new Notification('Tempo Excedido!', { body: `O vendedor ${seller.name} excedeu o limite padrão do lanche.` });
+                     } else if (Notification.permission !== 'denied') {
+                       Notification.requestPermission().then(perm => {
+                         if (perm === 'granted') {
+                           new Notification('Tempo Excedido!', { body: `O vendedor ${seller.name} excedeu o limite padrão do lanche.` });
+                         }
+                       });
+                     }
+                 }
+                 
+                 // Loop de áudio por até 5 minutos
+                 if (now - startTime < FIVE_MINUTES_MS) {
+                     hasNewAlertsToSound = true;
+                 }
+             }
+          }
+       }
+    });
+
+    setLunchAlertSellers(newAlerts);
+    
+    if (hasNewAlertsToSound) {
+        if (audioAlarmRef.current && audioAlarmRef.current.paused) {
+             audioAlarmRef.current.play().catch(e => console.error("Audio block:", e));
+        }
+    } else {
+        if (audioAlarmRef.current && !audioAlarmRef.current.paused) {
+             audioAlarmRef.current.pause();
+             audioAlarmRef.current.currentTime = 0;
+        }
+    }
+  }, [timerTick, activeBreaks, data, silencedAlerts]);
 
   useEffect(() => {
     loadData();
@@ -309,11 +418,16 @@ export default function Controller({ category }: ControllerProps) {
     cycleStartTime: new Date().toISOString(),
     teamGoals: {} as Record<number, { daily: number, weekly: number }>,
     sellerGoals: {} as Record<number, number>,
-    hybridConfig: {} as Record<number, { active: boolean, dailyGoal: number, weeklyGoal: number, inssSellerIds: number[] }>
+    hybridConfig: {} as Record<number, { active: boolean, dailyGoal: number, weeklyGoal: number, inssSellerIds: number[] }>,
+    defaultLunchTimeSeconds: 3600
   };
   try {
     if (data?.settings?.overlay_url?.startsWith('{')) {
        overlayData = { ...overlayData, ...JSON.parse(data.settings.overlay_url) };
+       // Retro-compatibility
+       if (overlayData.defaultLunchTimeSeconds === undefined && (overlayData as any).defaultLunchTime !== undefined) {
+          overlayData.defaultLunchTimeSeconds = (overlayData as any).defaultLunchTime * 60;
+       }
     } else if (data?.settings?.overlay_url) {
        overlayData.media = [data.settings.overlay_url];
     }
@@ -436,6 +550,56 @@ export default function Controller({ category }: ControllerProps) {
 
       <div className="max-w-[1400px] mx-auto space-y-8">
         
+        {/* MODAL / BANNER DE ALERTA DE LANCHE */}
+        <AnimatePresence>
+          {lunchAlertSellers.length > 0 && (
+            <motion.div 
+              initial={{ opacity: 0, y: -20, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full bg-red-950/80 border-2 border-red-500 rounded-3xl p-6 shadow-[0_0_40px_rgba(239,68,68,0.3)] backdrop-blur-md relative z-50 overflow-hidden"
+            >
+               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-rose-400 to-red-500 animate-pulse" />
+               <div className="flex flex-col md:flex-row items-center gap-6">
+                 <div className="flex-shrink-0 bg-red-500/20 p-4 rounded-full border border-red-500/50">
+                    <Clock className="w-10 h-10 text-red-400 animate-pulse" />
+                 </div>
+                 <div className="flex-1 w-full">
+                    <h3 className="text-2xl font-black uppercase tracking-tight text-red-400 mb-2 drop-shadow-md">⚠️ Alerta de Tempo Excedido</h3>
+                    <p className="text-red-200/80 text-sm font-medium">Os seguintes vendedores ultrapassaram o tempo padrão de lanche configurado ({Math.floor((overlayData.defaultLunchTimeSeconds || 3600) / 60)}m {(overlayData.defaultLunchTimeSeconds || 3600) % 60}s).</p>
+                    
+                    <div className="mt-4 flex flex-col gap-3">
+                      {lunchAlertSellers.map(seller => (
+                        <div key={seller.id} className="bg-black/40 border border-red-500/30 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                           <div className="flex items-center gap-3">
+                              <span className="font-bold text-white uppercase truncate">{seller.name}</span>
+                              <span className="text-xs font-mono bg-red-500/20 text-red-300 px-2 py-1 rounded-md flex-shrink-0">
+                                 Estourou em {Math.floor((seller.elapsedMs - ((overlayData.defaultLunchTimeSeconds || 3600) * 1000)) / 60000)}m {Math.floor(((seller.elapsedMs - ((overlayData.defaultLunchTimeSeconds || 3600) * 1000)) % 60000) / 1000)}s
+                              </span>
+                           </div>
+                           <div className="flex items-center gap-2">
+                             <button 
+                               onClick={() => setSilencedAlerts(prev => new Set(prev).add(seller.id))}
+                               className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-xs font-bold transition-colors border border-white/10"
+                             >
+                               Silenciar
+                             </button>
+                             <button 
+                               onClick={() => handleStopLunchBreak(seller.id)}
+                               className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-black uppercase tracking-widest transition-colors shadow-[0_0_15px_rgba(239,68,68,0.4)]"
+                             >
+                               Parar Lanche
+                             </button>
+                           </div>
+                        </div>
+                      ))}
+                    </div>
+                 </div>
+               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        
         {/* SEÇÃO DE METAS GLOBAIS E OVERLAY */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
            
@@ -446,9 +610,9 @@ export default function Controller({ category }: ControllerProps) {
                  <h2 className="text-xl font-bold uppercase tracking-tight">Gestor de Metas</h2>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                  <div className="space-y-2">
-                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest pl-1">Meta Diária (Individual)</label>
+                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest pl-1">Meta Diária</label>
                     <input 
                       type="text" 
                       defaultValue={data?.settings?.daily_goal}
@@ -458,7 +622,7 @@ export default function Controller({ category }: ControllerProps) {
                     />
                  </div>
                  <div className="space-y-2">
-                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest pl-1">Meta Semanal (Individual)</label>
+                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest pl-1">Meta Semanal</label>
                     <input 
                       type="text" 
                       defaultValue={data?.settings?.weekly_goal}
@@ -466,6 +630,25 @@ export default function Controller({ category }: ControllerProps) {
                       onBlur={(e) => handleUpdateGlobalGoal('weekly', e.target.value)}
                       className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-2xl font-black text-blue-400 focus:border-blue-400/50 transition-all outline-none"
                     />
+                 </div>
+                 <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                       <label className="text-[10px] text-gray-400 font-bold uppercase tracking-widest pl-1 flex items-center gap-1"><Clock className="w-3 h-3" /> Tempo Lanche</label>
+                       <button 
+                         onClick={() => saveOverlay({ defaultLunchTimeSeconds: lunchMins * 60 + lunchSecs })}
+                         className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg text-[10px] font-bold uppercase tracking-widest border border-emerald-500/30 transition-colors"
+                       >
+                         Salvar Tempo
+                       </button>
+                    </div>
+                    <div className="flex gap-2 relative">
+                       <div className="flex-1">
+                          <WheelPicker value={lunchMins} onChange={setLunchMins} min={0} max={120} label="MIN" />
+                       </div>
+                       <div className="flex-1">
+                          <WheelPicker value={lunchSecs} onChange={setLunchSecs} min={0} max={59} label="SEG" />
+                       </div>
+                    </div>
                  </div>
               </div>
 
