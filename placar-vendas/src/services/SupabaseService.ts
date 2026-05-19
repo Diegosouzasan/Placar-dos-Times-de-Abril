@@ -545,3 +545,15 @@ export async function fetchLunchBreakHistory(startDate?: string, endDate?: strin
   if (error) throw error;
   return data || [];
 }
+
+/** Busca todos os times cadastrados na base (id, name, category) */
+export async function fetchAllTeamsBasic(): Promise<{ id: number; name: string; category: string; }[]> {
+  const { data, error } = await supabase
+    .from("teams")
+    .select("id, name, category")
+    .order("name", { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+}
+

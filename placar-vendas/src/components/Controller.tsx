@@ -15,6 +15,7 @@ import {
   startLunchBreak,
   stopLunchBreak,
   fetchActiveLunchBreaks,
+  fetchAllTeamsBasic,
   type DashboardData,
   type TeamData,
   type LunchBreakRecord
@@ -55,6 +56,43 @@ export default function Controller({ category }: ControllerProps) {
   // Wheel picker local states
   const [lunchMins, setLunchMins] = useState(60);
   const [lunchSecs, setLunchSecs] = useState(0);
+
+  // Seller transfer modal states
+  const [transferSellerId, setTransferSellerId] = useState<number | null>(null);
+  const [transferSellerName, setTransferSellerName] = useState("");
+  const [allTeamsList, setAllTeamsList] = useState<{ id: number; name: string; category: string; }[]>([]);
+  const [transferDepartment, setTransferDepartment] = useState<'INSS' | 'CLT' | null>(null);
+  const [transferTargetTeamId, setTransferTargetTeamId] = useState<number | null>(null);
+
+  const openTransferModal = async (sellerId: number, name: string, currentTeamId: number) => {
+    try {
+      const teams = await fetchAllTeamsBasic();
+      setAllTeamsList(teams);
+      setTransferSellerId(sellerId);
+      setTransferSellerName(name);
+      setTransferDepartment(category); // Default to current category
+      
+      // Default to the first team in the current category that is NOT the seller's current team
+      const targetTeam = teams.find(t => t.category === category && t.id !== currentTeamId) || teams.find(t => t.category === category);
+      setTransferTargetTeamId(targetTeam ? targetTeam.id : null);
+    } catch (err) {
+      console.error("Erro ao buscar equipes para transferência:", err);
+    }
+  };
+
+  const handleConfirmTransfer = async () => {
+    if (!transferSellerId || !transferTargetTeamId) return;
+    try {
+      await moveSeller(transferSellerId, transferTargetTeamId);
+      setTransferSellerId(null);
+      setTransferSellerName("");
+      setTransferTargetTeamId(null);
+      await loadData();
+    } catch (err) {
+      console.error("Erro ao transferir vendedor:", err);
+      alert("Erro ao transferir o vendedor. Tente novamente.");
+    }
+  };
 
   const audioAlarmRef = useRef<HTMLAudioElement | null>(null);
 
@@ -332,22 +370,6 @@ export default function Controller({ category }: ControllerProps) {
       await deleteSeller(sellerId);
       await loadData();
     }
-  }
-
-  async function handleMoveSeller(sellerId: number, currentTeamId: number, otherTeamId: number) {
-      if (data) {
-        const sellerToMove = data.teams.flatMap(t => t.sellers).find(s => s.id === sellerId);
-        if (sellerToMove) {
-          const updatedTeams = data.teams.map(t => {
-            if (t.id === currentTeamId) return { ...t, sellers: t.sellers.filter(s => s.id !== sellerId) };
-            if (t.id === otherTeamId) return { ...t, sellers: [...t.sellers, sellerToMove] };
-            return t;
-          });
-          setData({ ...data, teams: updatedTeams });
-        }
-      }
-      await moveSeller(sellerId, otherTeamId);
-      await loadData();
   }
 
   // --- SETTINGS HANDLERS ---
@@ -991,8 +1013,6 @@ export default function Controller({ category }: ControllerProps) {
 
         <div className="grid grid-cols-1 gap-8">
           {data?.teams.map((team) => {
-            const otherTeam = data.teams.find(t => t.id !== team.id);
-            
             return (
               <div key={team.id} className="bg-[#151515] rounded-3xl p-6 border border-white/5 relative overflow-hidden">
                 {/* Header do Time */}
@@ -1558,7 +1578,7 @@ export default function Controller({ category }: ControllerProps) {
                                         <Clock className="w-4 h-4" />
                                       </button>
                                     )}
-                                    <button onClick={() => otherTeam && handleMoveSeller(seller.id, team.id, otherTeam.id)} className="p-2 hover:bg-white/5 rounded-xl text-yellow-400" ><ArrowLeftRight className="w-4 h-4" /></button>
+                                    <button onClick={() => openTransferModal(seller.id, seller.name, team.id)} title="Transferir vendedor de equipe" className="p-2 hover:bg-white/5 rounded-xl text-yellow-400" ><ArrowLeftRight className="w-4 h-4" /></button>
                                     <button onClick={() => handleDeleteSeller(seller.id)} className="p-2 hover:bg-white/5 rounded-xl text-red-500" ><Trash2 className="w-4 h-4" /></button>
                                  </>
                                )}
@@ -1602,6 +1622,116 @@ export default function Controller({ category }: ControllerProps) {
           })}
         </div>
       </div>
+
+      {/* MODAL DE TRANSFERÊNCIA DE VENDEDOR */}
+      <AnimatePresence>
+        {transferSellerId !== null && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ type: 'spring', duration: 0.3 }}
+              className="w-full max-w-md bg-zinc-950/90 border border-white/10 rounded-3xl p-6 shadow-2xl backdrop-blur-2xl relative overflow-hidden"
+            >
+              {/* Glow effects */}
+              <div className="absolute -top-40 -left-40 w-80 h-80 bg-yellow-500/10 rounded-full blur-[100px] pointer-events-none" />
+              <div className="absolute -bottom-40 -right-40 w-80 h-80 bg-blue-500/10 rounded-full blur-[100px] pointer-events-none" />
+
+              <div className="flex items-center justify-between mb-6 relative z-10">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-yellow-500/10 rounded-2xl text-yellow-400 border border-yellow-500/20">
+                    <ArrowLeftRight className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black tracking-tight text-white">Transferir Vendedor</h3>
+                    <p className="text-xs text-zinc-400">Alterar equipe e/ou departamento</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => { setTransferSellerId(null); setTransferSellerName(""); }}
+                  className="p-2 text-zinc-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-xl transition-all"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-4 relative z-10">
+                <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                  <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest block mb-1">Vendedor Selecionado</span>
+                  <span className="text-base font-bold text-white">{transferSellerName}</span>
+                </div>
+
+                {/* Selecionar Departamento */}
+                <div className="space-y-2">
+                  <label className="text-[10px] text-yellow-400 font-bold uppercase tracking-widest pl-1">Departamento</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {['CLT', 'INSS'].map((dept) => (
+                      <button
+                        key={dept}
+                        onClick={() => {
+                          setTransferDepartment(dept as 'CLT' | 'INSS');
+                          // Auto select first team in this category
+                          const firstTeam = allTeamsList.find(t => t.category === dept);
+                          setTransferTargetTeamId(firstTeam ? firstTeam.id : null);
+                        }}
+                        className={`p-3 rounded-xl border text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+                          transferDepartment === dept
+                            ? 'bg-yellow-500/20 border-yellow-500 text-yellow-400 shadow-lg shadow-yellow-500/10'
+                            : 'bg-black/40 border-white/10 text-zinc-400 hover:border-white/20'
+                        }`}
+                      >
+                        {dept}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Selecionar Time */}
+                <div className="space-y-2">
+                  <label className="text-[10px] text-yellow-400 font-bold uppercase tracking-widest pl-1">Nova Equipe</label>
+                  <div className="relative">
+                    <select
+                      value={transferTargetTeamId || ""}
+                      onChange={(e) => setTransferTargetTeamId(Number(e.target.value))}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl p-3.5 text-sm text-white focus:border-yellow-500/50 outline-none appearance-none cursor-pointer"
+                    >
+                      <option value="" disabled className="bg-zinc-950">Selecione uma equipe...</option>
+                      {allTeamsList
+                        .filter(t => t.category === transferDepartment)
+                        .map(t => (
+                          <option key={t.id} value={t.id} className="bg-zinc-950 text-white">
+                            {t.name}
+                          </option>
+                        ))
+                      }
+                    </select>
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-400">
+                      <ChevronDown className="w-4 h-4" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-8 relative z-10">
+                <button 
+                  onClick={() => { setTransferSellerId(null); setTransferSellerName(""); }}
+                  className="flex-1 p-3.5 bg-white/5 hover:bg-white/10 rounded-xl text-sm font-bold text-zinc-400 hover:text-white transition-all"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleConfirmTransfer}
+                  disabled={!transferTargetTeamId}
+                  className="flex-1 p-3.5 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-black rounded-xl text-sm font-black transition-all shadow-lg shadow-yellow-500/20"
+                >
+                  Confirmar Transferência
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
