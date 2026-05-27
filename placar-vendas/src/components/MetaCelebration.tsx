@@ -219,7 +219,7 @@ export function MetaCelebration({
                 </>
               ) : (
                 <>
-                  🏆 300 MIL ALCANÇADOS!
+                  🏆 200 MIL ALCANÇADOS!
                   <br />
                   <span className="text-yellow-400">
                     {team300k?.teamName}

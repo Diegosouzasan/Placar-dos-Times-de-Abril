@@ -28,14 +28,14 @@ function App() {
   const categoryTeamIdsRef = useRef<Set<number>>(new Set());
   const isFirstLoadRef = useRef(true);
 
-  // Helper: check if "Tropa de Elite" team hit 300k (CLT only)
+  // Helper: check if "Tropa de Elite" team hit 200k (CLT only)
   const check300kCelebration = (dashData: DashboardData) => {
     if (category !== 'CLT' || celebrated300kRef.current) return;
     const tropaTeam = dashData.teams.find(t =>
       t.teamName.toLowerCase().includes('tropa') ||
       t.teamName.toLowerCase().includes('elite')
     );
-    if (tropaTeam && tropaTeam.totalSales >= 300000) {
+    if (tropaTeam && tropaTeam.totalSales >= 200000) {
       celebrated300kRef.current = true;
       setCelebrating300k({ teamName: tropaTeam.teamName, totalSales: tropaTeam.totalSales });
     }
@@ -143,12 +143,12 @@ function App() {
           });
         });
 
-        // ── Reset comemoração 300k se o total do time caiu abaixo de 300k ──
+        // ── Reset comemoração 300k se o total do time caiu abaixo de 200k ──
         const tropaCheck = newData.teams.find(t =>
           t.teamName.toLowerCase().includes('tropa') ||
           t.teamName.toLowerCase().includes('elite')
         );
-        if (tropaCheck && tropaCheck.totalSales < 300000) {
+        if (tropaCheck && tropaCheck.totalSales < 200000) {
           celebrated300kRef.current = false;
         }
         
