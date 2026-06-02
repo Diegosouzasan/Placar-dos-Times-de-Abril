@@ -2,8 +2,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { 
   fetchPlacarData, 
-  updateSellerSales, 
-  toggleTeamMode, 
   addSeller, 
   deleteSeller, 
   moveSeller,
@@ -17,10 +15,9 @@ import {
   fetchActiveLunchBreaks,
   fetchAllTeamsBasic,
   type DashboardData,
-  type TeamData,
   type LunchBreakRecord
 } from '../services/SupabaseService';
-import { Plus, Trash2, Users, ArrowLeftRight, Save, X, Zap, Monitor, CheckCircle2, RotateCcw, Upload, Image as ImageIcon, ChevronLeft, Edit3, ChevronDown, Minus, BarChart, Clock } from 'lucide-react';
+import { Plus, Trash2, Users, ArrowLeftRight, X, Zap, Monitor, CheckCircle2, RotateCcw, Upload, Image as ImageIcon, ChevronLeft, Edit3, ChevronDown, Minus, BarChart, Clock } from 'lucide-react';
 import Reports from './Reports';
 
 import { motion, AnimatePresence } from 'framer-motion';
@@ -34,8 +31,6 @@ import { WheelPicker } from './WheelPicker';
 export default function Controller({ category }: ControllerProps) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [editingSeller, setEditingSeller] = useState<number | null>(null);
-  const [newValue, setNewValue] = useState("");
   const [newSellerName, setNewSellerName] = useState("");
   const [newSellerPhoto, setNewSellerPhoto] = useState<File | null>(null);
   const [selectedTeamForNewSeller, setSelectedTeamForNewSeller] = useState<number | null>(null);
@@ -299,47 +294,6 @@ export default function Controller({ category }: ControllerProps) {
       .replace(",", ".");
     const num = parseFloat(cleaned);
     return isNaN(num) ? 0 : num;
-  }
-
-  async function handleUpdateSales(sellerId: number) {
-    const numericValue = sanitizeNumber(newValue);
-    if (data) {
-      const updatedTeams = data.teams.map(team => ({
-        ...team,
-        sellers: team.sellers.map(s => 
-          s.id === sellerId ? { ...s, sales: numericValue } : s
-        )
-      }));
-      setData({ ...data, teams: updatedTeams });
-    }
-    await updateSellerSales(sellerId, numericValue);
-    setEditingSeller(null);
-    setNewValue("");
-    await loadData();
-  }
-
-  async function handleToggleMode(team: TeamData) {
-    const nextMode = !team.isManualMode;
-    if (data) {
-      const updatedTeams = data.teams.map(t => 
-        t.id === team.id ? { ...t, isManualMode: nextMode } : t
-      );
-      setData({ ...data, teams: updatedTeams });
-    }
-    await toggleTeamMode(team.id, nextMode, team.manualTotal);
-    await loadData();
-  }
-
-  async function handleUpdateManualTotal(teamId: number, val: string) {
-    const numericValue = sanitizeNumber(val);
-    if (data) {
-      const updatedTeams = data.teams.map(t => 
-        t.id === teamId ? { ...t, manualTotal: numericValue, totalSales: numericValue } : t
-      );
-      setData({ ...data, teams: updatedTeams });
-    }
-    await toggleTeamMode(teamId, true, numericValue);
-    await loadData();
   }
 
   async function handleAddSeller(teamId: number) {
