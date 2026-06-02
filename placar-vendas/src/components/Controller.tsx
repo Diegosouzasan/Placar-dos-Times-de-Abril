@@ -14,10 +14,11 @@ import {
   stopLunchBreak,
   fetchActiveLunchBreaks,
   fetchAllTeamsBasic,
+  updateSellerSales,
   type DashboardData,
   type LunchBreakRecord
 } from '../services/SupabaseService';
-import { Plus, Trash2, Users, ArrowLeftRight, X, Zap, Monitor, CheckCircle2, RotateCcw, Upload, Image as ImageIcon, ChevronLeft, Edit3, ChevronDown, Minus, BarChart, Clock } from 'lucide-react';
+import { Plus, Trash2, Users, ArrowLeftRight, X, Zap, Monitor, CheckCircle2, RotateCcw, Upload, Image as ImageIcon, ChevronLeft, Edit3, ChevronDown, Minus, BarChart, Clock, Save } from 'lucide-react';
 import Reports from './Reports';
 
 import { motion, AnimatePresence } from 'framer-motion';
@@ -38,6 +39,8 @@ export default function Controller({ category }: ControllerProps) {
   const [isCustomTv, setIsCustomTv] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [editingSellerGoal, setEditingSellerGoal] = useState<number | null>(null);
+  const [editingSeller, setEditingSeller] = useState<number | null>(null);
+  const [newValue, setNewValue] = useState("");
   const [showReports, setShowReports] = useState(false);
   const [selectingHybridForTeam, setSelectingHybridForTeam] = useState<number | null>(null);
   // Lunch break timer state
@@ -323,6 +326,19 @@ export default function Controller({ category }: ControllerProps) {
     if (confirm("Deseja realmente excluir este vendedor?")) {
       await deleteSeller(sellerId);
       await loadData();
+    }
+  }
+
+  async function handleUpdateSales(sellerId: number) {
+    try {
+      const numericValue = sanitizeNumber(newValue);
+      await updateSellerSales(sellerId, numericValue);
+      setEditingSeller(null);
+      setNewValue("");
+      await loadData();
+    } catch (error) {
+      console.error("Erro ao atualizar vendas:", error);
+      alert("Erro ao atualizar vendas. Tente novamente.");
     }
   }
 
@@ -1268,43 +1284,54 @@ export default function Controller({ category }: ControllerProps) {
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
-                                {editingSellerGoal === seller.id ? (
-                                  <input 
-                                    type="number" autoFocus
-                                    defaultValue={overlayData.sellerGoals?.[seller.id] || ""}
-                                    onBlur={(e) => {
-                                      const val = e.target.value;
-                                      const newGoals = { ...(overlayData.sellerGoals || {}) };
-                                      if (val && parseInt(val) > 0) newGoals[seller.id] = parseInt(val);
-                                      else delete newGoals[seller.id];
-                                      saveOverlay({ sellerGoals: newGoals });
-                                      setEditingSellerGoal(null);
-                                    }}
-                                    className="w-16 bg-amber-500/10 border border-amber-500/50 rounded-lg p-1 text-xs font-bold text-amber-500 outline-none text-right"
-                                  />
+                                {editingSeller === seller.id ? (
+                                  <div className="flex items-center gap-1">
+                                     <input autoFocus type="text" value={newValue} onChange={(e) => setNewValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleUpdateSales(seller.id); }} className="bg-[#0d0d0d] border border-amber-500/50 rounded-lg p-1.5 w-24 text-xs font-bold text-amber-100 outline-none text-right" />
+                                     <button onClick={() => handleUpdateSales(seller.id)} className="p-1.5 bg-emerald-600 rounded-lg hover:bg-emerald-500"><Save className="w-3 h-3 text-white" /></button>
+                                     <button onClick={() => setEditingSeller(null)} className="p-1.5 bg-red-600 rounded-lg hover:bg-red-500"><X className="w-3 h-3 text-white" /></button>
+                                  </div>
                                 ) : (
-                                  <button onClick={() => setEditingSellerGoal(seller.id)} className={`px-2 py-1 rounded-lg text-[10px] font-black ${overlayData.sellerGoals?.[seller.id] ? 'bg-amber-500 text-black' : 'bg-white/5 text-zinc-500'}`}>
-                                    {overlayData.sellerGoals?.[seller.id] ? `${(overlayData.sellerGoals[seller.id]/1000).toFixed(0)}k` : 'Meta'}
-                                  </button>
-                                )}
-                                {/* Lunch Break Timer Button - Hybrid INSS */}
-                                {activeBreaks[seller.id] ? (
-                                  <button
-                                    onClick={() => handleStopLunchBreak(seller.id)}
-                                    title={`Parar lanche (${formatElapsed(activeBreaks[seller.id].started_at)})`}
-                                    className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-orange-500/20 border border-orange-500/40 text-orange-400 animate-pulse hover:bg-orange-500/30 transition-all"
-                                  >
-                                    <Clock className="w-3.5 h-3.5" />
-                                    <span className="text-[10px] font-mono font-bold">{formatElapsed(activeBreaks[seller.id].started_at)}</span>
-                                  </button>
-                                ) : (
-                                  <button
-                                    onClick={() => handleStartLunchBreak(seller.id)}
-                                    title="Iniciar temporizador de lanche"
-                                    className="p-2 rounded-lg text-zinc-500 hover:text-orange-400 hover:bg-orange-500/10 transition-all"
-                                  >
-                                    <Clock className="w-4 h-4" />
-                                  </button>
+                                  <>
+                                    {editingSellerGoal === seller.id ? (
+                                      <input 
+                                        type="number" autoFocus
+                                        defaultValue={overlayData.sellerGoals?.[seller.id] || ""}
+                                        onBlur={(e) => {
+                                          const val = e.target.value;
+                                          const newGoals = { ...(overlayData.sellerGoals || {}) };
+                                          if (val && parseInt(val) > 0) newGoals[seller.id] = parseInt(val);
+                                          else delete newGoals[seller.id];
+                                          saveOverlay({ sellerGoals: newGoals });
+                                          setEditingSellerGoal(null);
+                                        }}
+                                        className="w-16 bg-amber-500/10 border border-amber-500/50 rounded-lg p-1 text-xs font-bold text-amber-500 outline-none text-right"
+                                      />
+                                    ) : (
+                                      <button onClick={() => setEditingSellerGoal(seller.id)} className={`px-2 py-1 rounded-lg text-[10px] font-black ${overlayData.sellerGoals?.[seller.id] ? 'bg-amber-500 text-black' : 'bg-white/5 text-zinc-500'}`}>
+                                        {overlayData.sellerGoals?.[seller.id] ? `${(overlayData.sellerGoals[seller.id]/1000).toFixed(0)}k` : 'Meta'}
+                                      </button>
+                                    )}
+                                    <button onClick={() => { setEditingSeller(seller.id); setNewValue(seller.sales > 0 ? seller.sales.toString() : ""); }} className="p-2 bg-amber-500/10 rounded-lg text-amber-500 hover:bg-amber-500/20 transition-all"><Plus className="w-4 h-4" /></button>
+                                    {/* Lunch Break Timer Button - Hybrid INSS */}
+                                    {activeBreaks[seller.id] ? (
+                                      <button
+                                        onClick={() => handleStopLunchBreak(seller.id)}
+                                        title={`Parar lanche (${formatElapsed(activeBreaks[seller.id].started_at)})`}
+                                        className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-orange-500/20 border border-orange-500/40 text-orange-400 animate-pulse hover:bg-orange-500/30 transition-all"
+                                      >
+                                        <Clock className="w-3.5 h-3.5" />
+                                        <span className="text-[10px] font-mono font-bold">{formatElapsed(activeBreaks[seller.id].started_at)}</span>
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleStartLunchBreak(seller.id)}
+                                        title="Iniciar temporizador de lanche"
+                                        className="p-2 rounded-lg text-zinc-500 hover:text-orange-400 hover:bg-orange-500/10 transition-all"
+                                      >
+                                        <Clock className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                  </>
                                 )}
                               </div>
                             </div>
@@ -1384,43 +1411,54 @@ export default function Controller({ category }: ControllerProps) {
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
-                                {editingSellerGoal === seller.id ? (
-                                  <input 
-                                    type="number" autoFocus
-                                    defaultValue={overlayData.sellerGoals?.[seller.id] || ""}
-                                    onBlur={(e) => {
-                                      const val = e.target.value;
-                                      const newGoals = { ...(overlayData.sellerGoals || {}) };
-                                      if (val && parseInt(val) > 0) newGoals[seller.id] = parseInt(val);
-                                      else delete newGoals[seller.id];
-                                      saveOverlay({ sellerGoals: newGoals });
-                                      setEditingSellerGoal(null);
-                                    }}
-                                    className="w-16 bg-emerald-500/10 border border-emerald-500/50 rounded-lg p-1 text-xs font-bold text-emerald-500 outline-none text-right"
-                                  />
+                                {editingSeller === seller.id ? (
+                                  <div className="flex items-center gap-1">
+                                     <input autoFocus type="text" value={newValue} onChange={(e) => setNewValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleUpdateSales(seller.id); }} className="bg-[#0d0d0d] border border-emerald-500/50 rounded-lg p-1.5 w-24 text-xs font-bold text-emerald-100 outline-none text-right" />
+                                     <button onClick={() => handleUpdateSales(seller.id)} className="p-1.5 bg-emerald-600 rounded-lg hover:bg-emerald-500"><Save className="w-3 h-3 text-white" /></button>
+                                     <button onClick={() => setEditingSeller(null)} className="p-1.5 bg-red-600 rounded-lg hover:bg-red-500"><X className="w-3 h-3 text-white" /></button>
+                                  </div>
                                 ) : (
-                                  <button onClick={() => setEditingSellerGoal(seller.id)} className={`px-2 py-1 rounded-lg text-[10px] font-black ${overlayData.sellerGoals?.[seller.id] ? 'bg-emerald-500 text-black' : 'bg-white/5 text-zinc-500'}`}>
-                                    {overlayData.sellerGoals?.[seller.id] ? `${(overlayData.sellerGoals[seller.id]/1000).toFixed(0)}k` : 'Meta'}
-                                  </button>
-                                )}
-                                {/* Lunch Break Timer Button - Hybrid CLT */}
-                                {activeBreaks[seller.id] ? (
-                                  <button
-                                    onClick={() => handleStopLunchBreak(seller.id)}
-                                    title={`Parar lanche (${formatElapsed(activeBreaks[seller.id].started_at)})`}
-                                    className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-orange-500/20 border border-orange-500/40 text-orange-400 animate-pulse hover:bg-orange-500/30 transition-all"
-                                  >
-                                    <Clock className="w-3.5 h-3.5" />
-                                    <span className="text-[10px] font-mono font-bold">{formatElapsed(activeBreaks[seller.id].started_at)}</span>
-                                  </button>
-                                ) : (
-                                  <button
-                                    onClick={() => handleStartLunchBreak(seller.id)}
-                                    title="Iniciar temporizador de lanche"
-                                    className="p-2 rounded-lg text-zinc-500 hover:text-orange-400 hover:bg-orange-500/10 transition-all"
-                                  >
-                                    <Clock className="w-4 h-4" />
-                                  </button>
+                                  <>
+                                    {editingSellerGoal === seller.id ? (
+                                      <input 
+                                        type="number" autoFocus
+                                        defaultValue={overlayData.sellerGoals?.[seller.id] || ""}
+                                        onBlur={(e) => {
+                                          const val = e.target.value;
+                                          const newGoals = { ...(overlayData.sellerGoals || {}) };
+                                          if (val && parseInt(val) > 0) newGoals[seller.id] = parseInt(val);
+                                          else delete newGoals[seller.id];
+                                          saveOverlay({ sellerGoals: newGoals });
+                                          setEditingSellerGoal(null);
+                                        }}
+                                        className="w-16 bg-emerald-500/10 border border-emerald-500/50 rounded-lg p-1 text-xs font-bold text-emerald-500 outline-none text-right"
+                                      />
+                                    ) : (
+                                      <button onClick={() => setEditingSellerGoal(seller.id)} className={`px-2 py-1 rounded-lg text-[10px] font-black ${overlayData.sellerGoals?.[seller.id] ? 'bg-emerald-500 text-black' : 'bg-white/5 text-zinc-500'}`}>
+                                        {overlayData.sellerGoals?.[seller.id] ? `${(overlayData.sellerGoals[seller.id]/1000).toFixed(0)}k` : 'Meta'}
+                                      </button>
+                                    )}
+                                    <button onClick={() => { setEditingSeller(seller.id); setNewValue(seller.sales > 0 ? seller.sales.toString() : ""); }} className="p-2 bg-emerald-500/10 rounded-lg text-emerald-500 hover:bg-emerald-500/20 transition-all"><Plus className="w-4 h-4" /></button>
+                                    {/* Lunch Break Timer Button - Hybrid CLT */}
+                                    {activeBreaks[seller.id] ? (
+                                      <button
+                                        onClick={() => handleStopLunchBreak(seller.id)}
+                                        title={`Parar lanche (${formatElapsed(activeBreaks[seller.id].started_at)})`}
+                                        className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-orange-500/20 border border-orange-500/40 text-orange-400 animate-pulse hover:bg-orange-500/30 transition-all"
+                                      >
+                                        <Clock className="w-3.5 h-3.5" />
+                                        <span className="text-[10px] font-mono font-bold">{formatElapsed(activeBreaks[seller.id].started_at)}</span>
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleStartLunchBreak(seller.id)}
+                                        title="Iniciar temporizador de lanche"
+                                        className="p-2 rounded-lg text-zinc-500 hover:text-orange-400 hover:bg-orange-500/10 transition-all"
+                                      >
+                                        <Clock className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                  </>
                                 )}
                               </div>
                             </div>
@@ -1474,6 +1512,14 @@ export default function Controller({ category }: ControllerProps) {
                             </div>
 
                             <div className="flex items-center gap-2 shrink-0">
+                               {editingSeller === seller.id ? (
+                                  <div className="flex items-center gap-1">
+                                     <input autoFocus type="text" value={newValue} onChange={(e) => setNewValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleUpdateSales(seller.id); }} className="bg-[#0d0d0d] border border-blue-500/50 rounded-lg p-1.5 w-24 text-xs font-bold text-blue-100 outline-none text-right" />
+                                     <button onClick={() => handleUpdateSales(seller.id)} className="p-1.5 bg-emerald-600 rounded-lg hover:bg-emerald-500"><Save className="w-3 h-3 text-white" /></button>
+                                     <button onClick={() => setEditingSeller(null)} className="p-1.5 bg-red-600 rounded-lg hover:bg-red-500"><X className="w-3 h-3 text-white" /></button>
+                                  </div>
+                               ) : (
+                                 <>
                                      {editingSellerGoal === seller.id ? (
                                        <input 
                                          type="number" autoFocus
@@ -1493,6 +1539,7 @@ export default function Controller({ category }: ControllerProps) {
                                           <span className="text-[10px] font-black">{overlayData.sellerGoals?.[seller.id] ? `${(overlayData.sellerGoals[seller.id]/1000).toFixed(0)}k` : 'Meta'}</span>
                                        </button>
                                      )}
+                                    <button onClick={() => { setEditingSeller(seller.id); setNewValue(seller.sales > 0 ? seller.sales.toString() : ""); }} className="p-2 hover:bg-white/5 rounded-xl text-blue-400" ><Plus className="w-4 h-4" /></button>
                                     {/* Lunch Break Timer Button */}
                                     {activeBreaks[seller.id] ? (
                                       <button
@@ -1514,6 +1561,8 @@ export default function Controller({ category }: ControllerProps) {
                                     )}
                                     <button onClick={() => openTransferModal(seller.id, seller.name, team.id)} title="Transferir vendedor de equipe" className="p-2 hover:bg-white/5 rounded-xl text-yellow-400" ><ArrowLeftRight className="w-4 h-4" /></button>
                                     <button onClick={() => handleDeleteSeller(seller.id)} className="p-2 hover:bg-white/5 rounded-xl text-red-500" ><Trash2 className="w-4 h-4" /></button>
+                                 </>
+                               )}
                             </div>
                           </div>
                         ))}
