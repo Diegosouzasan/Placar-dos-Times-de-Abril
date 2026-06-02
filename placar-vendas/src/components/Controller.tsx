@@ -1062,11 +1062,7 @@ export default function Controller({ category }: ControllerProps) {
                   </div>
                   
                   <div className="flex flex-col items-end gap-3">
-                    <div className="flex flex-col items-end gap-1">
-                      <button onClick={() => handleToggleMode(team)} className={`w-12 h-6 rounded-full p-1 transition-colors ${team.isManualMode ? 'bg-blue-600' : 'bg-gray-700'}`} >
-                        <div className={`w-4 h-4 bg-white rounded-full transition-transform ${team.isManualMode ? 'translate-x-6' : ''}`} />
-                      </button>
-                    </div>
+                    
 
                     {category === 'CLT' && (
                       <div className="flex flex-col items-end gap-1">
@@ -1337,7 +1333,6 @@ export default function Controller({ category }: ControllerProps) {
                                     {overlayData.sellerGoals?.[seller.id] ? `${(overlayData.sellerGoals[seller.id]/1000).toFixed(0)}k` : 'Meta'}
                                   </button>
                                 )}
-                                <button onClick={() => { setEditingSeller(seller.id); setNewValue(seller.sales > 0 ? seller.sales.toString() : ""); }} className="p-2 bg-amber-500/10 rounded-lg text-amber-500 hover:bg-amber-500/20 transition-all"><Plus className="w-4 h-4" /></button>
                                 {/* Lunch Break Timer Button - Hybrid INSS */}
                                 {activeBreaks[seller.id] ? (
                                   <button
@@ -1454,7 +1449,6 @@ export default function Controller({ category }: ControllerProps) {
                                     {overlayData.sellerGoals?.[seller.id] ? `${(overlayData.sellerGoals[seller.id]/1000).toFixed(0)}k` : 'Meta'}
                                   </button>
                                 )}
-                                <button onClick={() => { setEditingSeller(seller.id); setNewValue(seller.sales > 0 ? seller.sales.toString() : ""); }} className="p-2 bg-emerald-500/10 rounded-lg text-emerald-500 hover:bg-emerald-500/20 transition-all"><Plus className="w-4 h-4" /></button>
                                 {/* Lunch Break Timer Button - Hybrid CLT */}
                                 {activeBreaks[seller.id] ? (
                                   <button
@@ -1487,12 +1481,7 @@ export default function Controller({ category }: ControllerProps) {
                 {/* VISÃO NORMAL (LISTA FLAT) */}
                 {!team.isHybridMode && !selectingHybridForTeam && (
                   <>
-                    {team.isManualMode && (
-                      <div className="mb-6 animate-in slide-in-from-top-4 duration-300">
-                         <label className="text-xs text-blue-400 font-bold uppercase mb-2 block">Valor Total da Equipe (Geral)</label>
-                         <input type="text" defaultValue={team.manualTotal > 0 ? team.manualTotal : ""} onBlur={(e) => handleUpdateManualTotal(team.id, e.target.value)} className="w-full bg-black/40 border border-blue-500/30 rounded-xl p-3 text-2xl font-bold focus:outline-none focus:border-blue-500 text-blue-300 transition-all" />
-                      </div>
-                    )}
+
 
                     <div className="space-y-4">
                       <h3 className="text-xs text-gray-500 font-bold uppercase tracking-widest flex items-center gap-2">
@@ -1531,14 +1520,6 @@ export default function Controller({ category }: ControllerProps) {
                             </div>
 
                             <div className="flex items-center gap-2 shrink-0">
-                               {editingSeller === seller.id ? (
-                                  <div className="flex items-center gap-1">
-                                     <input autoFocus type="text" value={newValue} onChange={(e) => setNewValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleUpdateSales(seller.id); }} className="bg-blue-900/40 border border-blue-500/50 rounded-lg p-2 w-28 text-sm outline-none" />
-                                     <button onClick={() => handleUpdateSales(seller.id)} className="p-2 bg-green-600 rounded-lg hover:bg-green-500"><Save className="w-4 h-4" /></button>
-                                     <button onClick={() => setEditingSeller(null)} className="p-2 bg-red-600 rounded-lg hover:bg-red-500"><X className="w-4 h-4" /></button>
-                                  </div>
-                               ) : (
-                                 <>
                                      {editingSellerGoal === seller.id ? (
                                        <input 
                                          type="number" autoFocus
@@ -1558,7 +1539,6 @@ export default function Controller({ category }: ControllerProps) {
                                           <span className="text-[10px] font-black">{overlayData.sellerGoals?.[seller.id] ? `${(overlayData.sellerGoals[seller.id]/1000).toFixed(0)}k` : 'Meta'}</span>
                                        </button>
                                      )}
-                                    <button onClick={() => { setEditingSeller(seller.id); setNewValue(seller.sales > 0 ? seller.sales.toString() : ""); }} className="p-2 hover:bg-white/5 rounded-xl text-blue-400" ><Plus className="w-4 h-4" /></button>
                                     {/* Lunch Break Timer Button */}
                                     {activeBreaks[seller.id] ? (
                                       <button
@@ -1580,8 +1560,6 @@ export default function Controller({ category }: ControllerProps) {
                                     )}
                                     <button onClick={() => openTransferModal(seller.id, seller.name, team.id)} title="Transferir vendedor de equipe" className="p-2 hover:bg-white/5 rounded-xl text-yellow-400" ><ArrowLeftRight className="w-4 h-4" /></button>
                                     <button onClick={() => handleDeleteSeller(seller.id)} className="p-2 hover:bg-white/5 rounded-xl text-red-500" ><Trash2 className="w-4 h-4" /></button>
-                                 </>
-                               )}
                             </div>
                           </div>
                         ))}
