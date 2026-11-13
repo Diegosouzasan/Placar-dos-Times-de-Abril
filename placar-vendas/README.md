@@ -1,4 +1,14 @@
-# React + TypeScript + Vite
+# Placar de Vendas
+
+## Iniciar a aplicação
+
+Na pasta `placar-vendas`, use **Node.js 24** e execute `npm ci` na primeira instalação. `npm start` compila a aplicação e inicia o servidor local de pré-visualização com a API da Meta Recesso. Para desenvolvimento, use `npm run dev`. O terminal informa o endereço escolhido.
+
+A campanha precisa de um processo Node ativo no computador que serve o placar. Todas as telas devem usar o mesmo servidor para compartilhar dados. A API consulta o histórico do INSS e grava lançamentos, ajustes, composição das equipes e destinos das TVs em `.recesso/campaign.sqlite`. A pasta do banco é privada e fica fora do Git. Ao mover o servidor, pare o processo e preserve a pasta inteira. A variável de ambiente `RECESSO_DB_PATH` permite usar um arquivo SQLite persistente em outro diretório do host. As telas devem usar uma URL acessível na rede da empresa conforme a configuração da instalação.
+
+Os testes de cálculo e persistência rodam com `node --test server/recesso-store.test.ts server/recesso-source.test.ts`. Para testar uma instância isolada, defina `RECESSO_DISABLE_SYNC=1` e informe um arquivo temporário em `RECESSO_DB_PATH`.
+
+## React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient";
+import { resetRecessoDay } from './recesso';
 import type { TeamName } from "../config/teams";
 
 export interface RankedSeller {
@@ -196,17 +197,49 @@ export async function finalizeWeeklyMeta(category: string) {
   await updateSettings(category, { is_meta_active: false });
 }
 
+type PendingCampaignReset = { requestId: string, date: string, occurredAt: string };
+let pendingCampaignReset: PendingCampaignReset | null = null;
+const pendingResetStorageKey = 'recesso-pending-inss-reset';
+
+function rememberCampaignReset(value: PendingCampaignReset | null) {
+  pendingCampaignReset = value;
+  try {
+    if (value) localStorage.setItem(pendingResetStorageKey, JSON.stringify(value));
+    else localStorage.removeItem(pendingResetStorageKey);
+  } catch { /* In-memory retry remains available if the browser blocks storage. */ }
+}
+
+async function finishCampaignReset(input: PendingCampaignReset) {
+  try {
+    await resetRecessoDay(input);
+    rememberCampaignReset(null);
+  } catch {
+    throw new Error('O diário INSS foi zerado. Tente novamente para confirmar o mesmo fechamento na campanha.');
+  }
+}
+
 export async function resetDailySales(category: string) {
+  if (category === 'INSS') {
+    try {
+      pendingCampaignReset ??= JSON.parse(localStorage.getItem(pendingResetStorageKey) || 'null');
+    } catch { /* Retry using the in-memory operation. */ }
+    if (pendingCampaignReset) {
+      await finishCampaignReset(pendingCampaignReset);
+      return;
+    }
+  }
   // 1. Get teams of this category
-  const { data: teams } = await supabase
+  const { data: teams, error: teamsError } = await supabase
     .from("teams")
     .select("id")
     .eq("category", category);
   
+  if (teamsError) throw teamsError;
   const teamIds = teams?.map(t => t.id) || [];
 
   if (teamIds.length > 0) {
     // 2. Reset ONLY total_sales to 0 for these teams
+    const occurredAt = new Date().toISOString();
     const { error } = await supabase
       .from("sellers")
       .update({ 
@@ -215,6 +248,14 @@ export async function resetDailySales(category: string) {
       .in("team_id", teamIds);
     
     if (error) throw error;
+    if (category === 'INSS') {
+      const date = new Intl.DateTimeFormat('sv-SE', {
+        timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(new Date(occurredAt));
+      const operation = {date, occurredAt, requestId: 'inss-' + Date.now() + '-' + Math.random().toString(36).slice(2)};
+      rememberCampaignReset(operation);
+      await finishCampaignReset(operation);
+    }
   }
 }
 
@@ -235,25 +276,29 @@ export async function updateSellerSales(sellerId: number, newDaySales: number) {
   // The difference between the new input and the current day sales 
   // is what should be added/subtracted from the weekly total.
   const diff = newDaySales - currentDaySales;
+  if (diff === 0) return;
   const newWeeklySales = currentWeeklySales + diff;
 
-  const { error } = await supabase
+  let change = supabase
     .from("sellers")
     .update({ 
       total_sales: newDaySales, 
       weekly_sales: Math.max(0, newWeeklySales) 
     })
     .eq("id", sellerId);
-
+  change = seller.total_sales == null ? change.is("total_sales", null) : change.eq("total_sales", seller.total_sales);
+  change = seller.weekly_sales == null ? change.is("weekly_sales", null) : change.eq("weekly_sales", seller.weekly_sales);
+  const { data: changed, error } = await change.select('id').maybeSingle();
   if (error) throw error;
+  if (!changed) throw new Error('Outro lançamento alterou este vendedor. Confira o novo total e salve novamente.');
 
-  // Insert to sales_history if there is a difference
-  if (diff !== 0) {
-    await supabase.from("sales_history").insert({
+  const { error: historyError } = await supabase.from("sales_history").insert({
       seller_id: sellerId,
       amount: diff,
       created_at: new Date().toISOString()
-    });
+  });
+  if (historyError) {
+    throw new Error('O total do vendedor foi alterado, mas a gravação do histórico não foi confirmada. Confira o dia antes de corrigir a Meta Recesso.');
   }
 }
 
@@ -346,94 +391,6 @@ export async function fetchAllMetadata() {
   const { data: teams } = await supabase.from("teams").select("*");
   const { data: sellers } = await supabase.from("sellers").select("*");
   return { teams: teams || [], sellers: sellers || [] };
-}
-
-// Google Sheets Sync Logic
-export async function getLastSyncInfo() {
-  try {
-    const { data, error } = await supabase
-      .from("placar_settings")
-      .select("last_sync_at")
-      .limit(1)
-      .maybeSingle();
-    
-    // Se a coluna não existir (erro 42703), retornamos null silenciosamente
-    if (error) {
-      if (error.code === '42703') {
-        console.warn("Coluna 'last_sync_at' não encontrada em 'placar_settings'.");
-        return null;
-      }
-      throw error;
-    }
-    return data?.last_sync_at;
-  } catch (e) {
-    return null;
-  }
-}
-
-export async function syncToGoogleSheets(forceManual: boolean = false) {
-  try {
-    console.log(`Iniciando sincronização ${forceManual ? 'manual' : 'automática'} para Google Sheets...`);
-    
-    // 1. Buscar todos os dados de vendas
-    const { data: history, error: historyError } = await supabase
-      .from("sales_history")
-      .select("*");
-    
-    if (historyError) throw historyError;
-    if (!history || history.length === 0) {
-      console.log("Nenhum dado para sincronizar.");
-      return { success: true, count: 0 };
-    }
-
-    // TODO: Implementar chamada real para Google Sheets API aqui
-    // Por enquanto, simulamos o sucesso.
-    console.log(`Simulando envio de ${history.length} registros para Google Sheets...`);
-    
-    // 2. Após "sucesso", tentamos guardar a data/hora
-    const now = new Date().toISOString();
-    try {
-      const { error: updateError } = await supabase
-        .from("placar_settings")
-        .update({ last_sync_at: now })
-        .neq("id", 0);
-      
-      if (updateError && updateError.code !== '42703') throw updateError;
-    } catch (e) {
-      console.warn("Não foi possível salvar o timestamp da sync (coluna ausente).");
-    }
-
-    // 3. Deletamos os dados do Supabase para liberar espaço
-    const { error: deleteError } = await supabase
-      .from("sales_history")
-      .delete()
-      .neq("id", 0);
-    
-    if (deleteError) throw deleteError;
-
-    return { success: true, count: history.length, timestamp: now };
-  } catch (error) {
-    console.error("Erro na sincronização:", error);
-    throw error;
-  }
-}
-
-// Função para verificar se é o primeiro dia do mês e rodar o sync automático
-export async function checkAndRunMonthlySync() {
-  const now = new Date();
-  const lastSyncStr = await getLastSyncInfo();
-  const lastSync = lastSyncStr ? new Date(lastSyncStr) : null;
-
-  // Se for dia 1 e não sincronizou ainda HOJE
-  if (now.getDate() === 1) {
-    const todayStr = now.toISOString().split('T')[0];
-    const lastSyncDateStr = lastSync?.toISOString().split('T')[0];
-
-    if (todayStr !== lastSyncDateStr) {
-      return await syncToGoogleSheets(false);
-    }
-  }
-  return null;
 }
 
 // ============================================================

@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useSyncExternalStore } from "react";
 import { fetchPlacarData, updateSettings, type DashboardData, type RankedSeller } from "./services/SupabaseService";
 import { supabase } from "./services/supabaseClient";
 import { TeamBoard } from "./components/TeamBoard";
@@ -10,10 +10,21 @@ import { CategorySelection } from "./components/CategorySelection";
 import Reports from "./components/Reports";
 import { motion, AnimatePresence } from "framer-motion";
 import { VideoPreloader } from "./components/VideoPreloader";
+import { ScoreboardTitle, ScoreboardLogo } from "./components/ScoreboardBrand";
+import { useRecessoDisplay } from "./services/useRecessoDisplay";
+import { RecessoDisplay } from "./components/RecessoDisplay";
+import { isRecessoDestination } from "./services/recesso";
+
+function subscribeRoute(update: () => void) {
+  window.addEventListener('hashchange', update);
+  return () => window.removeEventListener('hashchange', update);
+}
 
 function App() {
-  const [category, setCategory] = useState<'INSS' | 'CLT' | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const route = useSyncExternalStore(subscribeRoute, () => window.location.hash).split('/');
+  const category = route[1] === 'inss' ? 'INSS' : route[1] === 'clt' ? 'CLT' : null;
+  const isAdmin = Boolean(category && route[2] === 'admin');
+  const isRecesso = route[1] === 'meta-recesso';
   const [data, setData] = useState<DashboardData>({ teams: [], winningTeam: null });
   const [celebratingSeller, setCelebratingSeller] = useState<RankedSeller | null>(null);
   const [celebrating300k, setCelebrating300k] = useState<Team300kCelebration | null>(null);
@@ -21,6 +32,9 @@ function App() {
   const [tempTvName, setTempTvName] = useState("");
   const [now, setNow] = useState(new Date());
   const [isAudioEnabled, setIsAudioEnabled] = useState(false);
+  const campaign = useRecessoDisplay(isRecesso || (category === 'INSS' && !isAdmin));
+  const showingCampaign = isRecesso || Boolean(category === 'INSS' && !isAdmin && campaign.snapshot &&
+    isRecessoDestination(campaign.snapshot, category, tvName));
   
   const celebratedSellersRef = useRef<Set<number>>(new Set());
   const celebrated300kRef = useRef(false);
@@ -41,39 +55,17 @@ function App() {
     }
   };
 
-  // Parse hash routing
-  useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash;
-      if (hash.startsWith("#/inss")) {
-        setCategory('INSS');
-        setIsAdmin(hash.includes("/admin"));
-      } else if (hash.startsWith("#/clt")) {
-        setCategory('CLT');
-        setIsAdmin(hash.includes("/admin"));
-      } else if (hash.startsWith("#/reports")) {
-        setCategory('REPORTS' as any);
-        setIsAdmin(false);
-      } else {
-        setCategory(null);
-        setIsAdmin(false);
-      }
-    };
-    
-    handleHashChange();
-    window.addEventListener("hashchange", handleHashChange);
-    return () => window.removeEventListener("hashchange", handleHashChange);
-  }, []);
-
   // Busca inicial e Realtime
   useEffect(() => {
-    if (!category || isAdmin) return;
+    if (!category || isAdmin || showingCampaign) return;
 
+    let closed = false;
     let channel: any;
 
     const init = async () => {
       try {
         const initialData = await fetchPlacarData(category);
+        if (closed) return;
         
         // Inicializar mapa de vendas para evitar som no primeiro load
         const initialSales: Record<number, number> = {};
@@ -94,6 +86,7 @@ function App() {
         console.error("Erro ao carregar dados do Supabase:", err);
       }
 
+    if (closed) return;
     // Configurar Realtime
     channel = supabase
       .channel(`dashboard-realtime-${category}`)
@@ -189,11 +182,12 @@ function App() {
     init();
 
     return () => {
+      closed = true;
       if (channel) {
         supabase.removeChannel(channel);
       }
     };
-  }, [category, isAdmin]);
+  }, [category, isAdmin, showingCampaign]);
 
   // Timer para o ciclo das Metas Avulsas
   useEffect(() => {
@@ -204,15 +198,13 @@ function App() {
     return () => clearInterval(timer);
   }, [isAdmin]);
 
+  if (showingCampaign) return <RecessoDisplay {...campaign} />;
+  if (route[1] === 'reports') return <Reports onBack={() => window.location.hash = '#/'} />;
   if (!category) {
     return <CategorySelection 
       onSelect={(cat) => window.location.hash = `#/${cat.toLowerCase()}`} 
       onOpenReports={() => window.location.hash = '#/reports'}
     />;
-  }
-
-  if (category === ('REPORTS' as any)) {
-    return <Reports onBack={() => window.location.hash = '#/'} />;
   }
 
   let overlayData = { 
@@ -448,9 +440,7 @@ function App() {
               className="w-16 lg:w-24 h-auto object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]"
             />
           )}
-          <h1 className="text-[clamp(1.5rem,6vh,4rem)] tracking-tighter uppercase font-black bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-teal-200 drop-shadow-[0_2px_10px_rgba(16,185,129,0.3)] leading-none text-center">
-            Placar {category}
-          </h1>
+          <ScoreboardTitle>Placar {category}</ScoreboardTitle>
         </div>
 
         {/* Lado Direito: Audio Status */}
@@ -518,11 +508,7 @@ function App() {
 
       {/* LOGO INFERIOR */}
       <div className="absolute bottom-2 lg:bottom-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-        <img 
-          src="/img/Logo Nosso Consignado.png" 
-          alt="Nosso Consignado" 
-          className="h-5 lg:h-8 object-contain opacity-70 drop-shadow-sm mix-blend-screen" 
-        />
+        <ScoreboardLogo />
       </div>
 
       {/* BOTAO PARA REDEFINIR NOME DA TV */}
