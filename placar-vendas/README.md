@@ -8,6 +8,25 @@ A campanha precisa de um processo Node ativo no computador que serve o placar. T
 
 Os testes de cálculo e persistência rodam com `node --test server/recesso-store.test.ts server/recesso-source.test.ts`. Para testar uma instância isolada, defina `RECESSO_DISABLE_SYNC=1` e informe um arquivo temporário em `RECESSO_DB_PATH`.
 
+## Corrigir as vendas diárias da Meta Recesso
+
+1. Acesse `/#/inss/admin/recesso` e localize o time da líder.
+2. No histórico diário, clique no quadradinho com o lápis da data desejada. Dias futuros ficam desabilitados.
+3. Informe o **valor completo daquele dia**, em reais (por exemplo, `1.500,00`). Zero também é permitido.
+4. Confira a previsão do acumulado e clique em **Salvar valor**.
+
+A alteração substitui o total daquele dia. Sua diferença recalcula a semana correspondente, o acumulado da equipe e da campanha, o valor restante e as metas por dia, semana e vendedor. Corrigir uma semana passada não altera as vendas da semana atual. O painel recebe os valores ao salvar; as TVs consultam as atualizações a cada três segundos. Os dias aparecem na semana real, de segunda a sexta, com lacunas para datas fora da campanha e feriados.
+
+Um saldo anterior já cadastrado é preservado: ele não absorve mais a diferença das novas correções diárias. As bases antigas mantêm seus valores até a primeira edição; nessa edição, o saldo é preservado e passa a ser fixo. **Editar total** ajusta esse saldo em relação aos dias já preenchidos. Vendas posteriores à correção continuam sendo somadas; registros antigos recebidos com atraso do INSS não duplicam o total corrigido. O comando **Zerar Diário** continua zerando apenas o contador desde o fechamento, preservando o histórico, a semana e o acumulado.
+
+Se outra pessoa alterar o mesmo dia, o formulário pede para reabrir com o valor atualizado. Reenviar a mesma operação não duplica o ajuste. O painel permanece compartilhado, sem login individual; cada líder utiliza a seção do próprio time.
+
+### Supabase e armazenamento
+
+**Não é necessário executar SQL, criar tabelas ou alterar políticas no Supabase para esta mudança.** Os ajustes são gravados pela API Node em `.recesso/campaign.sqlite`, inclusive o saldo preservado, na mesma transação do valor corrigido. O schema local é preparado automaticamente. As correções da Meta Recesso não reescrevem as vendas individuais do INSS ou seus relatórios no Supabase.
+
+A integração existente continua lendo `teams`, `sellers` e `sales_history` para importar a composição e as vendas do INSS. Mantenha o processo Node ativo, preserve a pasta `.recesso` ao mover ou atualizar a instalação e use o mesmo endereço de servidor em todos os painéis e TVs. Abrir cópias independentes do projeto cria bases locais separadas; publicar apenas os arquivos estáticos não disponibiliza a API da campanha.
+
 ## React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

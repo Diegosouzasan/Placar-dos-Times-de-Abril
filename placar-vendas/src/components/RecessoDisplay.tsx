@@ -27,12 +27,12 @@ function boardView(snapshot: RecessoSnapshot, error: string): RecessoBoardData {
         weekly: period(team.weeklyTargetCents, team.weekCents),
         weeks: groups.map(group => {
           const cells = group.map(date => {
-            const cents = recessoDayCents(team, date, today)
+            const cents = date ? recessoDayCents(team, date, today) : null
             return { date, amount: cents === null ? null : cents / 100 }
           })
           return {
             days: cells, current: group.includes(today),
-            total: cells.every(day => day.amount === null) ? null : group.reduce((sum, date) => sum + (team.days[date] ?? 0), 0) / 100,
+            total: cells.every(day => day.amount === null) ? null : group.reduce((sum, date) => sum + (date ? team.days[date] ?? 0 : 0), 0) / 100,
           }
         }),
       }

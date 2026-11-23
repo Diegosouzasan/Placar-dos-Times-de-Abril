@@ -549,8 +549,13 @@ export default function Controller({ category }: ControllerProps) {
             <BarChart className="w-4 h-4" /> Relatórios
           </button>
         </div>
-        {category === 'INSS' && <RecessoCampaignControls tvNames={[...overlayData.registeredTvs, ...(data?.teams.map(team => team.teamName) || [])]} />}
       </header>
+
+      {category === 'INSS' && (
+        <div className="max-w-[1400px] mx-auto mb-8">
+          <RecessoCampaignControls tvNames={[...overlayData.registeredTvs, ...(data?.teams.map(team => team.teamName) || [])]} />
+        </div>
+      )}
 
       {!data ? <div className="mx-auto max-w-6xl text-center text-zinc-300" role="status">
         {loading ? 'Carregando equipes e vendas…' : <>Não foi possível carregar o placar {category}. <button className="font-bold underline" onClick={() => void loadData()}>Tentar novamente</button></>}

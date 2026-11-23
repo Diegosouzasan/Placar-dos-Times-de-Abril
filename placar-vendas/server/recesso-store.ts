@@ -79,7 +79,7 @@ function businessDates(start: string, end: string): string[] {
   for (let instant = Date.parse(start + 'T12:00:00Z'); instant <= lastInstant; instant += dayMs) {
     const date = new Date(instant)
     const iso = date.toISOString().slice(0, 10)
-    if (date.getUTCDay() % 6 !== 0 && !campaignDaysOff.has(iso)) dates.push(iso)
+    if (date.getUTCDay() % 6 !== 0) dates.push(iso)
   }
   return dates
 }
@@ -153,7 +153,7 @@ export function createRecessoStore(file: string, clock: () => Date = () => new D
     const dates = businessDates(config.startDate, endDate)
     const today = saoPauloDate(clock())
     const weekMonday = mondayOf(today)
-    const daysRemaining = dates.filter(date => date >= today).length
+    const daysRemaining = dates.filter(date => date >= today && !campaignDaysOff.has(date)).length
     const roster = read<Partial<RecessoSourcePayload['roster']>>('roster', {})
     const rows = db.prepare(`
       SELECT team,date,cents,created_at FROM entries WHERE date BETWEEN ? AND ?
@@ -174,6 +174,7 @@ export function createRecessoStore(file: string, clock: () => Date = () => new D
       }
       const teamAdjustments = adjustments.filter(row => row.team === id)
       const anchor = teamAdjustments.filter(row => row.scope === 'team').at(-1)
+      const fixedOpening = read<number | null>('fixedOpening:' + id, null)
       let attributedAtAnchor = 0
       for (const date of dates) {
         const events = rows.filter(row => row.team === id && row.date === date)
@@ -204,7 +205,10 @@ export function createRecessoStore(file: string, clock: () => Date = () => new D
           attributedAtAnchor += Math.max(0, total - newlyRecorded)
         }
       }
-      if (anchor) {
+      if (fixedOpening !== null) {
+        team.openingCents = fixedOpening
+        team.soldCents += fixedOpening - cfg.openingCents
+      } else if (anchor) {
         team.openingCents = Math.max(0, Number(anchor.cents) - attributedAtAnchor)
         team.soldCents += team.openingCents - cfg.openingCents
       }
@@ -269,9 +273,8 @@ export function createRecessoStore(file: string, clock: () => Date = () => new D
       const snapshot = getSnapshot()
       requireValue(snapshot.dates.includes(input.date), 'Data fora dos dias de campanha.')
       const team = snapshot.teams.find(t => t.id === input.teamId)!
-      if (input.date > snapshot.today) {
-        requireValue((team.days[input.date] ?? 0) + input.amountCents >= 0, 'A correção tornaria negativo o valor desse dia.')
-      } else {
+      requireValue((team.days[input.date] ?? 0) + input.amountCents >= 0, 'A correção tornaria negativo o valor desse dia.')
+      if (input.date <= snapshot.today) {
         requireValue(team.soldCents + input.amountCents >= 0, 'A correção tornaria negativo o total da equipe.')
       }
       insertEntry.run(key, input.teamId, input.date, input.amountCents, seller, paid, nextStamp())
@@ -311,13 +314,22 @@ export function createRecessoStore(file: string, clock: () => Date = () => new D
         }
         return
       }
-      if (scope === 'day') requireValue(snapshot.dates.includes(date), 'Escolha um dos dias da campanha.')
+      if (scope === 'day') {
+        requireValue(snapshot.dates.includes(date), 'Escolha um dos dias da campanha.')
+        requireValue(date <= snapshot.today, 'Só é possível editar dias anteriores ou o dia atual.')
+      }
       const team = snapshot.teams.find(t => t.id === input.teamId)!
       const current = scope === 'day' ? (team.days[date] ?? 0) : team.soldCents
       if (current !== input.expectedCents) throw new RecessoError('O valor mudou desde a última leitura. Atualize e confira o total.', 409)
       if (scope === 'team') {
         requireValue(input.amountCents >= team.soldCents - team.openingCents, 'O total não pode ser menor que as células já preenchidas. Corrija o histórico primeiro.')
       }
+      // Preserve legacy balances until the first edit. From then on, a correction
+      // must change sales by its full difference, never consume an opening balance.
+      // Keep this in the same transaction as the adjustment and its idempotency key.
+      write('fixedOpening:' + input.teamId, scope === 'team'
+        ? input.amountCents - (team.soldCents - team.openingCents)
+        : team.openingCents)
       db.prepare('INSERT INTO adjustments(request_id,team,scope,date,cents,expected,created_at) VALUES (?,?,?,?,?,?,?)')
         .run(input.requestId, input.teamId, scope, date, input.amountCents, input.expectedCents, nextStamp())
     })

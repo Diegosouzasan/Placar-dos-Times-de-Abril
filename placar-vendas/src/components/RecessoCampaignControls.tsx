@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronDown, Monitor, SlidersHorizontal } from 'lucide-react';
+import { CalendarDays, ChevronDown, Monitor, RotateCcw, SlidersHorizontal, Target, TrendingUp, Users } from 'lucide-react';
 import {
   getRecesso,
   isRecessoDestination,
@@ -33,6 +33,12 @@ export default function RecessoCampaignControls({ tvNames }: { tvNames: string[]
   const writeLock = useRef(false);
   const pendingClose = useRef<{ date: string, requestId: string } | null>(null);
   const sequence = useRef(0);
+
+  function setEditorBusy(saving: boolean) {
+    writeLock.current = saving;
+    ++sequence.current;
+    setBusy(saving);
+  }
 
   const acceptSnapshot = useCallback((value: RecessoSnapshot) => {
     sequence.current += 1;
@@ -71,6 +77,11 @@ export default function RecessoCampaignControls({ tvNames }: { tvNames: string[]
   const mixed = selected === '*' && individualDestinations.some(([, active]) => active !== global);
   const active = selected && snapshot ? isRecessoDestination(snapshot, 'INSS', selected) : false;
   const destinationLabel = selected === '*' ? 'todas as TVs do INSS' : selected;
+
+  const progressPct = snapshot && snapshot.goalCents > 0
+    ? Math.min(100, (snapshot.soldCents / snapshot.goalCents) * 100)
+    : 0;
+
   async function setActive(next: boolean) {
     if (writeLock.current || !selected || (target === '' && selected === '*')) return;
     writeLock.current = true;
@@ -123,45 +134,274 @@ export default function RecessoCampaignControls({ tvNames }: { tvNames: string[]
     }
   }
 
-  return <section aria-label="Exibição da Meta Recesso" className="mt-5 rounded-xl border border-zinc-700 bg-zinc-900 p-4">
-    <div className="flex flex-wrap items-end gap-3">
-      <button aria-expanded={details} aria-controls="recesso-settings" onClick={() => setDetails(!details)} className="mr-auto flex items-center gap-2 self-center py-2 text-left text-sm font-bold text-white hover:text-emerald-300">
-        <SlidersHorizontal size={17} aria-hidden="true" /> Gerenciar Meta Recesso <ChevronDown size={15} aria-hidden="true" className={details ? 'rotate-180' : ''} />
-      </button>
-      <label className="min-w-40 flex-1 text-xs font-semibold text-zinc-300 sm:max-w-64">Exibir em
-        <select value={target} disabled={busy} onChange={event => { setTarget(event.target.value); setNotice(''); }} className="mt-1 w-full rounded-md border border-zinc-600 bg-zinc-950 px-3 py-2 text-sm text-white">
-          <option value="*">Todas as TVs do INSS</option>
-          {[...known].sort().filter(name => name !== '*').map(name => <option value={name} key={name}>{name}</option>)}
-          <option value="">Outra TV…</option>
-        </select>
-      </label>
-      {target === '' && <label className="text-xs text-zinc-300">Nome usado na TV
-        <input value={custom} onChange={event => { setCustom(event.target.value); setNotice(''); }} maxLength={100} className="mt-1 block rounded-md border border-zinc-600 bg-zinc-950 px-3 py-2 text-sm text-white" />
-      </label>}
-      <button type="button" onClick={() => void setActive(mixed || !active)} disabled={busy || !snapshot || !selected || (target === '' && selected === '*')} className="flex items-center gap-2 rounded-lg bg-emerald-400 px-4 py-2.5 text-sm font-bold text-zinc-950 hover:bg-emerald-300 disabled:opacity-50">
-        <Monitor size={17} aria-hidden="true" /> {active && !mixed ? 'Voltar ao placar INSS' : 'Ativar placar Meta Recesso'}
-      </button>
-      {mixed && <button type="button" disabled={busy} onClick={() => void setActive(false)} className="py-2 text-sm font-semibold text-zinc-200 underline">Voltar todas ao INSS</button>}
-    </div>
-    <div aria-live="polite" className="mt-2 text-right text-xs text-zinc-300">
-      {error ? <><span className="text-amber-200">{error}</span> <button className="ml-2 underline" onClick={() => void refresh()}>Tentar novamente</button></> : notice || (snapshot ? (mixed ? 'As TVs do INSS estão exibindo placares diferentes.' : active ? 'Exibição atual: Meta Recesso' : 'Exibição atual: placar INSS') : 'Consultando exibição…')}
-    </div>
-    {details && snapshot && <div id="recesso-settings" className="mt-4 border-t border-zinc-700 pt-4">
-      <p className="mb-3 text-sm text-zinc-300">Campanha de <strong>{shortRecessoDate(snapshot.startDate)} a {shortRecessoDate(snapshot.endDate)}</strong>. Os cadastros pagos e pendentes das equipes do INSS contam para a meta conjunta de {formatCents(snapshot.goalCents)}.</p>
-      {snapshot.sourceStatus.state === 'error' && <p role="status" className="mb-4 text-xs text-amber-200">A origem INSS está indisponível. A consulta e os ajustes continuam com os dados gravados da campanha.</p>}
-      <div className="grid gap-4 md:grid-cols-2">
-        {snapshot.teams.map(team => <div key={team.id} className="rounded-lg bg-zinc-950 p-4">
-          <div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="text-base font-bold">{team.name}</h3><span className="text-sm text-zinc-300">{team.sellerCount} vendedores</span></div>
-          {team.sourceTeamName && <p className="mt-1 text-xs font-semibold text-emerald-300">{team.sourceTeamName}</p>}
-          <p className="mt-1 text-xs text-zinc-400">{team.members.map(member => member.name).join(', ') || 'Aguardando a composição do INSS.'}</p>
-          <dl className="mt-3 grid grid-cols-2 gap-2 text-xs text-zinc-300"><div><dt>Diário</dt><dd className="text-sm font-semibold text-white">{formatCents(team.dayCents)}</dd></div><div><dt>Semana</dt><dd className="text-sm font-semibold text-white">{formatCents(team.weekCents)}</dd></div></dl>
-          <RecessoTeamEditor team={team} dates={snapshot.dates} today={snapshot.today} onSaved={acceptSnapshot} />
-        </div>)}
+  return (
+    <section
+      aria-label="Exibição da Meta Recesso"
+      className="rounded-2xl border border-zinc-800 bg-zinc-900/90 shadow-xl backdrop-blur-sm overflow-hidden"
+    >
+      {/* Top Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4 bg-zinc-900/95">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            type="button"
+            aria-expanded={details}
+            aria-controls="recesso-settings"
+            onClick={() => setDetails(!details)}
+            className="group flex items-center gap-2.5 rounded-xl border border-zinc-700/80 bg-zinc-950/70 px-3.5 py-2.5 text-left text-sm font-bold text-white transition-colors hover:border-emerald-500/60 hover:text-emerald-300"
+          >
+            <SlidersHorizontal size={16} aria-hidden="true" className="text-emerald-400 shrink-0" />
+            <span>Gerenciar Meta Recesso</span>
+            <ChevronDown
+              size={15}
+              aria-hidden="true"
+              className={`text-zinc-400 transition-transform duration-200 group-hover:text-emerald-300 ${details ? 'rotate-180' : ''}`}
+            />
+          </button>
+
+          {snapshot && (
+            <span
+              className={`hidden sm:inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-wide ${
+                mixed
+                  ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+                  : active
+                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                    : 'border-zinc-700 bg-zinc-800/70 text-zinc-300'
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  mixed ? 'bg-amber-400' : active ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-400'
+                }`}
+              />
+              {mixed ? 'Exibição mista' : active ? 'Meta Recesso ativa' : 'Placar INSS ativo'}
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="min-w-[200px] text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+            Exibir em
+            <select
+              value={target}
+              disabled={busy}
+              onChange={event => { setTarget(event.target.value); setNotice(''); }}
+              className="mt-1 block w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm font-medium text-white outline-none focus:border-emerald-400"
+            >
+              <option value="*">Todas as TVs do INSS</option>
+              {[...known].sort().filter(name => name !== '*').map(name => (
+                <option value={name} key={name}>{name}</option>
+              ))}
+              <option value="">Outra TV…</option>
+            </select>
+          </label>
+
+          {target === '' && (
+            <label className="min-w-[180px] text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+              Nome usado na TV
+              <input
+                value={custom}
+                onChange={event => { setCustom(event.target.value); setNotice(''); }}
+                maxLength={100}
+                placeholder="Ex: TV Recepção"
+                className="mt-1 block w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm font-medium text-white outline-none focus:border-emerald-400"
+              />
+            </label>
+          )}
+
+          <button
+            type="button"
+            onClick={() => void setActive(mixed || !active)}
+            disabled={busy || !snapshot || !selected || (target === '' && selected === '*')}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-all disabled:opacity-50 ${
+              active && !mixed
+                ? 'border border-zinc-600 bg-zinc-800 text-white hover:border-zinc-400 hover:bg-zinc-700'
+                : 'bg-emerald-400 text-zinc-950 shadow-[0_0_16px_rgba(52,211,153,0.2)] hover:bg-emerald-300'
+            }`}
+          >
+            <Monitor size={16} aria-hidden="true" />
+            {active && !mixed ? 'Voltar ao placar INSS' : 'Ativar placar Meta Recesso'}
+          </button>
+
+          {mixed && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void setActive(false)}
+              className="py-2 text-xs font-semibold text-zinc-300 underline hover:text-white"
+            >
+              Voltar todas ao INSS
+            </button>
+          )}
+        </div>
       </div>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-zinc-400">O fechamento do Diário mantém a semana e o histórico das duas equipes.</p>
-        <button type="button" disabled={busy || snapshot.dayCents === 0} onClick={() => void closeDay()} className="rounded-md border border-zinc-600 px-3 py-2 text-xs font-semibold text-zinc-200 hover:border-zinc-300 disabled:opacity-50">Zerar Diário da campanha</button>
-      </div>
-    </div>}
-  </section>;
+
+      {/* Live status bar */}
+      {(error || notice || !snapshot) && (
+        <div
+          aria-live="polite"
+          className={`flex items-center justify-between gap-2 border-t px-5 py-2 text-xs ${
+            error
+              ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+              : 'border-zinc-800 bg-zinc-950/50 text-zinc-300'
+          }`}
+        >
+          <span>
+            {error || notice || 'Consultando exibição da campanha…'}
+          </span>
+          {error && (
+            <button
+              type="button"
+              className="font-semibold underline hover:text-white"
+              onClick={() => void refresh()}
+            >
+              Tentar novamente
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Expanded Meta Recesso Control Area */}
+      {details && snapshot && (
+        <div id="recesso-settings" className="border-t border-zinc-800 bg-zinc-950/40 p-5 space-y-6">
+          {/* Campaign Summary Strip */}
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-2 text-sm text-zinc-300">
+                <CalendarDays size={16} className="text-emerald-400 shrink-0" aria-hidden="true" />
+                <span>
+                  Campanha de <strong className="text-white">{shortRecessoDate(snapshot.startDate)} a {shortRecessoDate(snapshot.endDate)}</strong>
+                  <span className="mx-2 text-zinc-600">•</span>
+                  Meta conjunta de <strong className="text-emerald-300">{formatCents(snapshot.goalCents)}</strong>
+                </span>
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-md bg-zinc-900 border border-zinc-800 px-2.5 py-1 text-xs font-semibold text-zinc-300 tabular-nums">
+                {snapshot.daysRemaining} {snapshot.daysRemaining === 1 ? 'dia útil restante' : 'dias úteis restantes'}
+              </span>
+            </div>
+
+            {snapshot.sourceStatus.state === 'error' && (
+              <p role="status" className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                A origem INSS está indisponível. A consulta e os ajustes continuam com os dados gravados da campanha.
+              </p>
+            )}
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/70 px-3.5 py-2.5">
+                <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                  <TrendingUp size={12} className="text-emerald-400" aria-hidden="true" /> Vendido total
+                </span>
+                <strong className="mt-1 block text-lg font-bold text-white tabular-nums">
+                  {formatCents(snapshot.soldCents)}
+                </strong>
+                <span className="text-[11px] text-emerald-400 font-semibold tabular-nums">
+                  {progressPct.toFixed(1).replace('.', ',')}% da meta
+                </span>
+              </div>
+
+              <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/70 px-3.5 py-2.5">
+                <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                  <Target size={12} className="text-amber-400" aria-hidden="true" /> Falta p/ meta
+                </span>
+                <strong className="mt-1 block text-lg font-bold text-white tabular-nums">
+                  {formatCents(snapshot.remainingCents)}
+                </strong>
+                <span className="text-[11px] text-zinc-400 tabular-nums">
+                  Meta/dia: {formatCents(snapshot.dailyTargetCents)}
+                </span>
+              </div>
+
+              <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/70 px-3.5 py-2.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                  Diário (2 times)
+                </span>
+                <strong className="mt-1 block text-lg font-bold text-emerald-300 tabular-nums">
+                  {formatCents(snapshot.dayCents)}
+                </strong>
+                <span className="text-[11px] text-zinc-400 tabular-nums">
+                  Hoje ({shortRecessoDate(snapshot.today)})
+                </span>
+              </div>
+
+              <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/70 px-3.5 py-2.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                  Semana (2 times)
+                </span>
+                <strong className="mt-1 block text-lg font-bold text-white tabular-nums">
+                  {formatCents(snapshot.weekCents)}
+                </strong>
+                <span className="text-[11px] text-zinc-400 tabular-nums">
+                  Por vendedor/dia: {formatCents(snapshot.perSellerCents)}
+                </span>
+              </div>
+            </div>
+
+            {/* Progress bar */}
+            <div className="mt-3.5 h-2 w-full overflow-hidden rounded-full bg-zinc-800">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Teams Stacked Vertically (Full Width so all 6 weeks fit cleanly without clipping) */}
+          <div className="space-y-6">
+            {snapshot.teams.map(team => (
+              <article
+                key={team.id}
+                className="rounded-xl border border-zinc-800 bg-zinc-950 p-5 shadow-md"
+              >
+                {/* Team Header */}
+                <div className="flex flex-wrap items-start justify-between gap-3 pb-4 border-b border-zinc-800/90">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <h3 className="text-lg font-bold text-white">{team.name}</h3>
+                      {team.sourceTeamName && (
+                        <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-emerald-300">
+                          {team.sourceTeamName}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-zinc-400">
+                      {team.members.map(member => member.name).join(' • ') || 'Aguardando a composição do INSS.'}
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-zinc-300">
+                    <Users size={14} className="text-emerald-400" aria-hidden="true" />
+                    {team.sellerCount} {team.sellerCount === 1 ? 'vendedor' : 'vendedores'}
+                  </span>
+                </div>
+
+                {/* Team KPIs + Calendar Editor */}
+                <RecessoTeamEditor
+                  team={team}
+                  dates={snapshot.dates}
+                  today={snapshot.today}
+                  onSaved={acceptSnapshot}
+                  disabled={busy}
+                  onSavingChange={setEditorBusy}
+                />
+              </article>
+            ))}
+          </div>
+
+          {/* Footer Action */}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/60 px-4 py-3">
+            <p className="text-xs text-zinc-400">
+              O fechamento do Diário zera apenas o contador do dia de hoje, mantendo a semana, o histórico e o acumulado das duas equipes.
+            </p>
+            <button
+              type="button"
+              disabled={busy || snapshot.dayCents === 0}
+              onClick={() => void closeDay()}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-950 px-3.5 py-2 text-xs font-semibold text-zinc-200 transition-colors hover:border-amber-400/60 hover:text-amber-200 disabled:opacity-40"
+            >
+              <RotateCcw size={13} aria-hidden="true" />
+              Zerar Diário da campanha
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
 }

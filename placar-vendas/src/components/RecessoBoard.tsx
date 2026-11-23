@@ -79,10 +79,13 @@ function TeamHistory({ team }: { team: RecessoTeamView }) {
           {recessoWeekdays.map((weekday, dayIndex) => (
             <tr key={weekday}><th scope="row">{weekday}</th>{team.weeks.map((week, i) => {
               const day = week.days[dayIndex];
+              const hasValue = day?.amount != null && day.amount > 0;
               return (
-                <td key={i} className={day?.amount == null ? 'rc-empty' : ''}>
-                  {day?.date && <time className="rc-cell-date" dateTime={day.date}>{shortDate(day.date)}</time>}
-                  <HistoryAmount amount={day?.amount ?? null} />
+                <td key={i} className={hasValue ? 'rc-filled' : 'rc-empty'}>
+                  <div className="rc-cell">
+                    {day?.date && <time className="rc-cell-date" dateTime={day.date}>{shortDate(day.date)}</time>}
+                    {hasValue && <HistoryAmount amount={day.amount} />}
+                  </div>
                 </td>
               );
             })}</tr>
@@ -106,7 +109,7 @@ function TeamBlock({ team }: { team: RecessoTeamView }) {
           {team.sourceTeamName && <TeamCrest name={team.sourceTeamName} className="rc-crest" />}
           <div className="rc-team-identity">
             <h2>{team.name}</h2>
-            <p>{team.sourceTeamName}{team.sourceTeamName && ' · '}{team.sellerCount} vendedores</p>
+            {team.sourceTeamName && <p>{team.sourceTeamName}</p>}
           </div>
           <div className="rc-team-total"><span>Venda total</span><strong>{value(team.periodSold)}</strong></div>
         </header>
@@ -156,11 +159,96 @@ function CampaignOverview({ data }: { data: RecessoBoardData }) {
   );
 }
 
+interface PortraitPerson {
+  name: string;
+  src: string;
+  scale?: number;
+  shiftY?: string;
+  z?: number;
+}
+
+const leftSellers: PortraitPerson[] = [
+  { name: 'Anny', src: '/img/recesso/anny.png', scale: 0.96, shiftY: '2%', z: 3 },
+  { name: 'Cris', src: '/img/recesso/cris.png', scale: 1.03, shiftY: '0%', z: 5 },
+  { name: 'Ileno', src: '/img/recesso/ileno.png', scale: 0.98, shiftY: '-2%', z: 2 },
+  { name: 'Leilane', src: '/img/recesso/leilane.png', scale: 1.02, shiftY: '1%', z: 6 },
+  { name: 'Laiane', src: '/img/recesso/laiane.png', scale: 1.0, shiftY: '3%', z: 5 },
+  { name: 'Fernanda', src: '/img/recesso/fernanda.png', scale: 1.02, shiftY: '2%', z: 4 },
+  { name: 'Leticia', src: '/img/recesso/leticia.png', scale: 0.84, shiftY: '7%', z: 3 },
+  { name: 'Mateus', src: '/img/recesso/mateus.png', scale: 0.92, shiftY: '6%', z: 4 },
+];
+
+const rightSellers: PortraitPerson[] = [
+  { name: 'Grazy', src: '/img/recesso/grazy.png', scale: 0.96, shiftY: '3%', z: 4 },
+  { name: 'Stefanie', src: '/img/recesso/stefanie.png', scale: 1.01, shiftY: '1%', z: 5 },
+  { name: 'Bianca', src: '/img/recesso/bianca.png', scale: 1.02, shiftY: '-1%', z: 3 },
+  { name: 'Ketlhyn', src: '/img/recesso/ketlhyn.png', scale: 1.05, shiftY: '0%', z: 6 },
+  { name: 'Klara', src: '/img/recesso/klara.png', scale: 0.98, shiftY: '3%', z: 4 },
+  { name: 'Bruno', src: '/img/recesso/bruno.png', scale: 0.91, shiftY: '4%', z: 5 },
+];
+
+function TeamPortraits() {
+  return (
+    <div className="rc-portraits" aria-hidden="true">
+      {/* Líder e vendedores - Time Ivanize (Esquerda) */}
+      <div className="rc-side rc-side-left">
+        <img
+          src="/img/recesso/ivanize.png"
+          alt=""
+          className="rc-leader-photo rc-leader-left"
+          decoding="async"
+        />
+        <div className="rc-seller-row rc-seller-row-left">
+          {leftSellers.map(person => (
+            <div
+              key={person.name}
+              className="rc-seller-slot"
+              style={{
+                '--rc-p-scale': person.scale ?? 1,
+                '--rc-p-y': person.shiftY ?? '0%',
+                zIndex: person.z ?? 1,
+              } as CSSProperties}
+            >
+              <img src={person.src} alt="" className="rc-seller-photo" decoding="async" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Líder e vendedores - Time Claudenise (Direita) */}
+      <div className="rc-side rc-side-right">
+        <img
+          src="/img/recesso/claudenise.png"
+          alt=""
+          className="rc-leader-photo rc-leader-right"
+          decoding="async"
+        />
+        <div className="rc-seller-row rc-seller-row-right">
+          {rightSellers.map(person => (
+            <div
+              key={person.name}
+              className="rc-seller-slot"
+              style={{
+                '--rc-p-scale': person.scale ?? 1,
+                '--rc-p-y': person.shiftY ?? '0%',
+                zIndex: person.z ?? 1,
+              } as CSSProperties}
+            >
+              <img src={person.src} alt="" className="rc-seller-photo" decoding="async" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function RecessoBoard({ data, onBack, onAdmin }: RecessoBoardProps) {
   const start = shortDate(data.startDate);
   const end = shortDate(data.endDate);
   return (
     <main className="rc-board">
+      <TeamPortraits />
       <div className="rc-page">
         <header className="rc-masthead">
           {onBack && <button className="rc-back" type="button" onClick={onBack} aria-label="Voltar ao menu"><ArrowLeft size={15} aria-hidden="true" /> Voltar</button>}
