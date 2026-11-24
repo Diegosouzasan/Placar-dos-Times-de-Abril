@@ -1,7 +1,8 @@
-import { ArrowLeft, CalendarDays, Settings, Trophy } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Settings } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { recessoWeekdays } from '../services/recesso';
 import { ScoreboardTitle, ScoreboardLogo, TeamCrest } from './ScoreboardBrand';
+import LeaderSpritePlayer, { type LeaderSpriteConfig } from './LeaderSpritePlayer';
 import './RecessoBoard.css';
 
 export interface RecessoTeamView {
@@ -165,38 +166,64 @@ interface PortraitPerson {
   scale?: number;
   shiftY?: string;
   z?: number;
+  dur?: string;
+  delay?: string;
 }
 
 const leftSellers: PortraitPerson[] = [
-  { name: 'Anny', src: '/img/recesso/anny.png', scale: 0.96, shiftY: '2%', z: 3 },
-  { name: 'Cris', src: '/img/recesso/cris.png', scale: 1.03, shiftY: '0%', z: 5 },
-  { name: 'Ileno', src: '/img/recesso/ileno.png', scale: 0.98, shiftY: '-2%', z: 2 },
-  { name: 'Leilane', src: '/img/recesso/leilane.png', scale: 1.02, shiftY: '1%', z: 6 },
-  { name: 'Laiane', src: '/img/recesso/laiane.png', scale: 1.0, shiftY: '3%', z: 5 },
-  { name: 'Fernanda', src: '/img/recesso/fernanda.png', scale: 1.02, shiftY: '2%', z: 4 },
-  { name: 'Leticia', src: '/img/recesso/leticia.png', scale: 0.84, shiftY: '7%', z: 3 },
-  { name: 'Mateus', src: '/img/recesso/mateus.png', scale: 0.92, shiftY: '6%', z: 4 },
+  { name: 'Anny', src: '/img/recesso/anny.png', scale: 0.96, shiftY: '2%', z: 3, dur: '4.4s', delay: '-0.3s' },
+  { name: 'Cris', src: '/img/recesso/cris.png', scale: 1.03, shiftY: '0%', z: 5, dur: '5.1s', delay: '-2.2s' },
+  { name: 'Ileno', src: '/img/recesso/ileno.png', scale: 0.98, shiftY: '-2%', z: 2, dur: '4.7s', delay: '-1.1s' },
+  { name: 'Leilane', src: '/img/recesso/leilane.png', scale: 1.02, shiftY: '1%', z: 6, dur: '5.4s', delay: '-3.5s' },
+  { name: 'Laiane', src: '/img/recesso/laiane.png', scale: 1.0, shiftY: '3%', z: 5, dur: '4.3s', delay: '-1.8s' },
+  { name: 'Fernanda', src: '/img/recesso/fernanda.png', scale: 1.02, shiftY: '2%', z: 4, dur: '5.0s', delay: '-4.1s' },
+  { name: 'Leticia', src: '/img/recesso/leticia.png', scale: 0.84, shiftY: '7%', z: 3, dur: '4.6s', delay: '-0.9s' },
+  { name: 'Mateus', src: '/img/recesso/mateus.png', scale: 0.92, shiftY: '6%', z: 4, dur: '5.3s', delay: '-2.7s' },
 ];
 
 const rightSellers: PortraitPerson[] = [
-  { name: 'Grazy', src: '/img/recesso/grazy.png', scale: 0.96, shiftY: '3%', z: 4 },
-  { name: 'Stefanie', src: '/img/recesso/stefanie.png', scale: 1.01, shiftY: '1%', z: 5 },
-  { name: 'Bianca', src: '/img/recesso/bianca.png', scale: 1.02, shiftY: '-1%', z: 3 },
-  { name: 'Ketlhyn', src: '/img/recesso/ketlhyn.png', scale: 1.05, shiftY: '0%', z: 6 },
-  { name: 'Klara', src: '/img/recesso/klara.png', scale: 0.98, shiftY: '3%', z: 4 },
-  { name: 'Bruno', src: '/img/recesso/bruno.png', scale: 0.91, shiftY: '4%', z: 5 },
+  { name: 'Grazy', src: '/img/recesso/grazy.png', scale: 0.96, shiftY: '3%', z: 4, dur: '4.8s', delay: '-1.4s' },
+  { name: 'Stefanie', src: '/img/recesso/stefanie.png', scale: 1.01, shiftY: '1%', z: 5, dur: '5.2s', delay: '-3.1s' },
+  { name: 'Bianca', src: '/img/recesso/bianca.png', scale: 1.02, shiftY: '-1%', z: 3, dur: '4.5s', delay: '-0.6s' },
+  { name: 'Ketlhyn', src: '/img/recesso/ketlhyn.png', scale: 1.05, shiftY: '0%', z: 6, dur: '5.5s', delay: '-2.4s' },
+  { name: 'Klara', src: '/img/recesso/klara.png', scale: 0.98, shiftY: '3%', z: 4, dur: '4.4s', delay: '-3.9s' },
+  { name: 'Bruno', src: '/img/recesso/bruno.png', scale: 0.91, shiftY: '4%', z: 5, dur: '5.0s', delay: '-1.7s' },
 ];
+
+const ivanizeSprite: LeaderSpriteConfig = {
+  id: 'ivanize',
+  basePath: '/img/recesso/leaders/ivanize',
+  numSheets: 4,
+  cols: 6,
+  perSheet: 30,
+  totalFrames: 120,
+  frameW: 379,
+  frameH: 480,
+  fps: 15,
+  pauseMs: 30_000,
+};
+
+const claudeniseSprite: LeaderSpriteConfig = {
+  id: 'claudenise',
+  basePath: '/img/recesso/leaders/claudenise',
+  numSheets: 4,
+  cols: 6,
+  perSheet: 30,
+  totalFrames: 120,
+  frameW: 444,
+  frameH: 480,
+  fps: 15,
+  pauseMs: 30_000,
+};
 
 function TeamPortraits() {
   return (
     <div className="rc-portraits" aria-hidden="true">
       {/* Líder e vendedores - Time Ivanize (Esquerda) */}
       <div className="rc-side rc-side-left">
-        <img
-          src="/img/recesso/ivanize.png"
-          alt=""
+        <LeaderSpritePlayer
+          config={ivanizeSprite}
           className="rc-leader-photo rc-leader-left"
-          decoding="async"
         />
         <div className="rc-seller-row rc-seller-row-left">
           {leftSellers.map(person => (
@@ -206,6 +233,8 @@ function TeamPortraits() {
               style={{
                 '--rc-p-scale': person.scale ?? 1,
                 '--rc-p-y': person.shiftY ?? '0%',
+                '--rc-a-dur': person.dur ?? '4.8s',
+                '--rc-a-delay': person.delay ?? '0s',
                 zIndex: person.z ?? 1,
               } as CSSProperties}
             >
@@ -217,11 +246,9 @@ function TeamPortraits() {
 
       {/* Líder e vendedores - Time Claudenise (Direita) */}
       <div className="rc-side rc-side-right">
-        <img
-          src="/img/recesso/claudenise.png"
-          alt=""
+        <LeaderSpritePlayer
+          config={claudeniseSprite}
           className="rc-leader-photo rc-leader-right"
-          decoding="async"
         />
         <div className="rc-seller-row rc-seller-row-right">
           {rightSellers.map(person => (
@@ -231,6 +258,8 @@ function TeamPortraits() {
               style={{
                 '--rc-p-scale': person.scale ?? 1,
                 '--rc-p-y': person.shiftY ?? '0%',
+                '--rc-a-dur': person.dur ?? '4.8s',
+                '--rc-a-delay': person.delay ?? '0s',
                 zIndex: person.z ?? 1,
               } as CSSProperties}
             >
@@ -262,11 +291,6 @@ export function RecessoBoard({ data, onBack, onAdmin }: RecessoBoardProps) {
         <CampaignOverview data={data} />
         <section className="rc-teams" aria-label="Resultados dos times">
           {data.teams.map(team => <TeamBlock team={team} key={team.id} />)}
-        </section>
-        <section className="rc-prizes rc-panel" aria-labelledby="rc-prizes-title">
-          <Trophy aria-hidden="true" />
-          <div><h2 id="rc-prizes-title">Premiações</h2>
-          {data.prizes && <p>{data.prizes}</p>}</div>
         </section>
         <footer className="rc-brand"><ScoreboardLogo /></footer>
       </div>
