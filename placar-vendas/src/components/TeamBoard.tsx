@@ -1,3 +1,4 @@
+import { TeamCrest } from "./ScoreboardBrand";
 import type { TeamData } from "../services/SupabaseService";
 import { SellerCard } from "./SellerCard";
 import { Trophy } from "lucide-react";
@@ -160,26 +161,7 @@ export function TeamBoard({ teamData, isWinning, dailyGoal, weeklyGoal, isSingle
       <div className="flex-shrink-0 flex items-center justify-between border-b border-white/10 pb-4 mb-4 lg:pb-6 lg:mb-6">
         <div className="flex items-center gap-3 lg:gap-6">
           <div className="relative">
-             <img
-               src={
-                 teamData.teamName.toUpperCase() === "TROPA DE ELITE" ? "/img/Logos/Logo Tropa de Elite.png" :
-                 teamData.teamName.toUpperCase() === "AGUIAS" ? "/img/Logos/Logo Aguias.png" :
-                 teamData.teamName.toUpperCase() === "PATROAS" ? "/img/Logos/Logo Patroas.png" :
-                 `/img/Logos/Logo ${teamData.teamName}.png`
-               }
-               alt={`Logo ${teamData.teamName}`}
-               className={`w-[clamp(4rem,8vh,6rem)] h-[clamp(4rem,8vh,6rem)] object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.2)] ${
-                 teamData.teamName.toUpperCase() === "PATROAS" ? "scale-90" : "scale-100"
-               }`}
-               onError={(e) => {
-                 const img = e.currentTarget;
-                 if (!img.src.includes('/Logos/')) {
-                    img.style.display = 'none';
-                 } else {
-                    img.src = `/img/LOGO ${teamData.teamName}.png`;
-                 }
-               }}
-             />
+             <TeamCrest name={teamData.teamName} className="w-[clamp(4rem,8vh,6rem)] h-[clamp(4rem,8vh,6rem)] object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]" />
           </div>
 
           <div className="relative">

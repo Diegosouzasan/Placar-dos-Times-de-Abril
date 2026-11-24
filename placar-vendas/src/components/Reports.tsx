@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
-import { fetchSalesHistory, fetchAllMetadata, syncToGoogleSheets, checkAndRunMonthlySync, getLastSyncInfo } from '../services/SupabaseService';
+import { fetchSalesHistory, fetchAllMetadata } from '../services/SupabaseService';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Area, AreaChart 
 } from 'recharts';
 import * as XLSX from 'xlsx';
 import { format, parseISO } from 'date-fns';
-import { Download, Filter, ArrowLeft, RefreshCw, TrendingUp, DollarSign, Calendar, BarChart3, X, User, Activity, CloudUpload, History, Clock } from 'lucide-react';
+import { Download, Filter, ArrowLeft, RefreshCw, TrendingUp, DollarSign, Calendar, BarChart3, X, User, Activity, Clock } from 'lucide-react';
 import LunchBreakReport from './LunchBreakReport';
 
 export default function Reports({ onBack }: { onBack: () => void }) {
@@ -15,8 +15,6 @@ export default function Reports({ onBack }: { onBack: () => void }) {
   const [allSellers, setAllSellers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSellerForReport, setSelectedSellerForReport] = useState<any>(null);
-  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
-  const [syncing, setSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState<'vendas' | 'lanche'>('vendas');
 
   // Filters
@@ -47,15 +45,6 @@ export default function Reports({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     loadData();
-    // Verificar sync automático ao abrir
-    checkAndRunMonthlySync().then(res => {
-      if (res?.success && res.timestamp) {
-        setLastSyncAt(res.timestamp);
-        loadData();
-      }
-    });
-    // Buscar info da última sync
-    getLastSyncInfo().then(val => setLastSyncAt(val || null));
   }, [startDate, endDate]);
 
   const filteredData = useMemo(() => {
@@ -184,25 +173,6 @@ export default function Reports({ onBack }: { onBack: () => void }) {
     XLSX.writeFile(workbook, `Relatorio_Geral_${format(new Date(), 'dd_MM_yyyy')}.xlsx`);
   };
 
-  const handleManualSync = async () => {
-    const confirmed = window.confirm("Deseja subir os dados para o Google Sheets agora? Após o sucesso, os dados locais do Supabase serão limpos.");
-    if (confirmed) {
-      try {
-        setSyncing(true);
-        const res = await syncToGoogleSheets(true);
-        if (res.success && res.timestamp) {
-          setLastSyncAt(res.timestamp);
-          alert(`Sincronização concluída! ${res.count} registros enviados.`);
-          loadData();
-        }
-      } catch (e) {
-        alert("Erro na sincronização. Tente novamente.");
-      } finally {
-        setSyncing(false);
-      }
-    }
-  };
-
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
   };
@@ -236,21 +206,7 @@ export default function Reports({ onBack }: { onBack: () => void }) {
               >
                 <Download className="w-4 h-4" /> Exportar Excel
               </button>
-              <button 
-                onClick={handleManualSync}
-                disabled={syncing}
-                className={`flex items-center gap-2 px-4 py-2 ${syncing ? 'bg-zinc-800' : 'bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30'} font-bold rounded-lg transition-all`}
-              >
-                {syncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CloudUpload className="w-4 h-4" />}
-                {syncing ? 'Sincronizando...' : 'Subir Dados'}
-              </button>
             </div>
-            {lastSyncAt && (
-              <div className="flex items-center gap-1.5 text-[10px] text-zinc-500">
-                <History className="w-3 h-3" />
-                Última sync: {format(parseISO(lastSyncAt), 'dd/MM/yyyy HH:mm')}
-              </div>
-            )}
           </div>
         </div>
 

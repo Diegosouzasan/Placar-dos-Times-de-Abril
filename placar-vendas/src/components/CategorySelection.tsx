@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { BarChart3, ChevronRight } from "lucide-react";
+import { BarChart3, ChevronRight, Flag } from "lucide-react";
 
 interface CategorySelectionProps {
   onSelect: (category: 'INSS' | 'CLT') => void;
@@ -64,8 +64,12 @@ export function CategorySelection({ onSelect, onOpenReports }: CategorySelection
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.5 }}
-        className="mt-12 z-10"
+        className="mt-8 mb-14 z-10 flex flex-wrap justify-center gap-3"
       >
+        <a href="#/meta-recesso" className="inline-flex items-center gap-4 px-7 py-4 rounded-[2rem] border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 focus-visible:outline-emerald-400">
+          <Flag aria-hidden="true" className="w-6 h-6 text-emerald-400" />
+          <span className="text-left"><strong className="block uppercase">Meta Recesso</strong><span className="text-sm text-zinc-400">Campanha do INSS</span></span>
+        </a>
         <button 
           onClick={onOpenReports}
           className="flex items-center gap-6 px-10 py-5 bg-gradient-to-r from-emerald-500/10 to-teal-500/5 hover:from-emerald-500/20 hover:to-teal-500/10 border border-white/10 hover:border-emerald-500/50 rounded-[2rem] transition-all group relative overflow-hidden"

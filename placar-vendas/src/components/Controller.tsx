@@ -20,6 +20,7 @@ import {
 } from '../services/SupabaseService';
 import { Plus, Trash2, Users, ArrowLeftRight, X, Zap, Monitor, CheckCircle2, RotateCcw, Upload, Image as ImageIcon, ChevronLeft, Edit3, ChevronDown, Minus, BarChart, Clock, Save } from 'lucide-react';
 import Reports from './Reports';
+import RecessoCampaignControls from './RecessoCampaignControls';
 
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -42,6 +43,7 @@ export default function Controller({ category }: ControllerProps) {
   const [editingSeller, setEditingSeller] = useState<number | null>(null);
   const [newValue, setNewValue] = useState("");
   const [showReports, setShowReports] = useState(false);
+  const [resettingDaily, setResettingDaily] = useState(false);
   const [selectingHybridForTeam, setSelectingHybridForTeam] = useState<number | null>(null);
   // Lunch break timer state
   const [activeBreaks, setActiveBreaks] = useState<Record<number, LunchBreakRecord>>({});
@@ -338,7 +340,9 @@ export default function Controller({ category }: ControllerProps) {
       await loadData();
     } catch (error) {
       console.error("Erro ao atualizar vendas:", error);
-      alert("Erro ao atualizar vendas. Tente novamente.");
+      const reason = error instanceof Error ? error.message : 'Não foi possível atualizar o valor.';
+      await loadData();
+      alert(reason);
     }
   }
 
@@ -382,9 +386,19 @@ export default function Controller({ category }: ControllerProps) {
   }
 
   async function handleResetDaily() {
-    if (confirm("Deseja realmente ZERAR apenas as vendas diárias? Os valores semanais serão mantidos.")) {
+    if (resettingDaily) return;
+    const message = category === 'INSS'
+      ? 'Zerar o Diário do INSS e da Meta Recesso? O histórico e os totais da semana e da campanha serão mantidos.'
+      : 'Deseja realmente ZERAR apenas as vendas diárias? Os valores semanais serão mantidos.';
+    if (!confirm(message)) return;
+    setResettingDaily(true);
+    try {
       await resetDailySales(category);
       await loadData();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Não foi possível concluir o fechamento diário. Verifique a conexão.');
+    } finally {
+      setResettingDaily(false);
     }
   }
 
@@ -506,9 +520,6 @@ export default function Controller({ category }: ControllerProps) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [data?.settings?.is_overlay_active, overlayData.media, overlayData.index]);
 
-  if (loading) return <div className="flex items-center justify-center min-h-screen text-white bg-[#0a0a0a]">Carregando Controle...</div>;
-  if (!data) return <div className="flex items-center justify-center min-h-screen text-white bg-[#0a0a0a]">Erro ao carregar dados. Tente atualizar a página.</div>;
-
   if (showReports) {
     return <Reports onBack={() => setShowReports(false)} />;
   }
@@ -520,7 +531,7 @@ export default function Controller({ category }: ControllerProps) {
       <header className="max-w-6xl mx-auto mb-10 relative">
         <button 
           onClick={() => window.location.hash = `#/${category.toLowerCase()}`}
-          className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center gap-2 text-zinc-500 hover:text-white transition-colors font-bold uppercase tracking-widest text-xs"
+          className="mb-3 flex items-center gap-2 text-zinc-400 hover:text-white transition-colors font-bold uppercase tracking-widest text-xs md:absolute md:left-0 md:top-5"
         >
           <ChevronLeft className="w-4 h-4" /> Voltar ao Placar
         </button>
@@ -530,7 +541,7 @@ export default function Controller({ category }: ControllerProps) {
           </h1>
           <p className="text-gray-400">Gerenciamento de Vendas e Equipes - {category}</p>
         </div>
-        <div className="absolute right-0 top-1/2 -translate-y-1/2 hidden md:block">
+        <div className="absolute right-0 top-3 hidden md:block">
           <button 
             onClick={() => setShowReports(true)}
             className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-black font-black uppercase tracking-widest text-xs rounded-lg transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]"
@@ -540,6 +551,15 @@ export default function Controller({ category }: ControllerProps) {
         </div>
       </header>
 
+      {category === 'INSS' && (
+        <div className="max-w-[1400px] mx-auto mb-8">
+          <RecessoCampaignControls tvNames={[...overlayData.registeredTvs, ...(data?.teams.map(team => team.teamName) || [])]} />
+        </div>
+      )}
+
+      {!data ? <div className="mx-auto max-w-6xl text-center text-zinc-300" role="status">
+        {loading ? 'Carregando equipes e vendas…' : <>Não foi possível carregar o placar {category}. <button className="font-bold underline" onClick={() => void loadData()}>Tentar novamente</button></>}
+      </div> : <>
       <div className="max-w-[1400px] mx-auto space-y-8">
         
         {/* MODAL / BANNER DE ALERTA DE LANCHE */}
@@ -672,6 +692,7 @@ export default function Controller({ category }: ControllerProps) {
                  </button>
                   <button 
                     onClick={handleResetDaily}
+                    disabled={resettingDaily}
                     className="flex-1 flex items-center justify-center gap-2 p-5 rounded-2xl bg-zinc-800 text-zinc-300 border border-white/10 font-black uppercase tracking-widest transition-all hover:bg-zinc-700"
                   >
                      <RotateCcw className="w-5 h-5" />
@@ -1713,6 +1734,7 @@ export default function Controller({ category }: ControllerProps) {
           </div>
         )}
       </AnimatePresence>
+      </>}
     </div>
   );
 }
