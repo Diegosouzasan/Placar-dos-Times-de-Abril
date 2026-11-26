@@ -7,7 +7,7 @@
 CREATE TABLE IF NOT EXISTS public.recesso_config (
     id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
     revision INTEGER NOT NULL DEFAULT 1,
-    start_date TEXT NOT NULL DEFAULT '2026-11-13',
+    start_date TEXT NOT NULL DEFAULT '2026-11-02',
     destinations JSONB NOT NULL DEFAULT '{}'::jsonb,
     fixed_openings JSONB NOT NULL DEFAULT '{}'::jsonb,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL

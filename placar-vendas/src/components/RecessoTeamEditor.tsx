@@ -210,7 +210,7 @@ export default function RecessoTeamEditor({ team, dates, today, onSaved, disable
           tabIndex={0}
         >
           <table
-            className="w-full min-w-[740px] table-fixed border-separate border-spacing-2 tabular-nums"
+            className="w-full min-w-[880px] table-fixed border-separate border-spacing-2 tabular-nums"
             aria-label={'Histórico diário de ' + team.name}
           >
             <colgroup>

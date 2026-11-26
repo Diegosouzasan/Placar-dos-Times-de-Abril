@@ -114,7 +114,7 @@ const teamDisplayNames: Record<RecessoTeamId, string> = {
   claudenise: 'Time Claudenise',
 }
 const GOAL_CENTS = 1_200_000_000
-const DEFAULT_START_DATE = '2026-11-13'
+const DEFAULT_START_DATE = '2026-11-02'
 const END_DATE = '2026-12-18'
 const CAMPAIGN_DAYS_OFF = new Set(['2026-11-20'])
 const DAY_MS = 86_400_000
@@ -292,7 +292,9 @@ export async function getRecesso(): Promise<RecessoSnapshot> {
   if (adjustmentsRes.error) handleSupabaseError(adjustmentsRes.error, 'Falha ao ler ajustes da Meta Recesso.')
   if (resetsRes.error) handleSupabaseError(resetsRes.error, 'Falha ao ler fechamento diário da Meta Recesso.')
 
-  const startDate = config.start_date || DEFAULT_START_DATE
+  const startDate = config.start_date && config.start_date <= DEFAULT_START_DATE
+    ? config.start_date
+    : DEFAULT_START_DATE
   const dates = campaignWeekdays(startDate, END_DATE)
   const daysRemaining = dates.filter(date => date >= today && !CAMPAIGN_DAYS_OFF.has(date)).length
   const destinations = (config.destinations && typeof config.destinations === 'object') ? config.destinations : {}

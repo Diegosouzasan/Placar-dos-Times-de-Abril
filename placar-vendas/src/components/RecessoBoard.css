@@ -272,10 +272,10 @@
   margin-top: clamp(4px, .6vh, 8px);
   padding-inline: var(--rc-team-inset);
 }
-.rc-history table { table-layout: fixed; border-spacing: 5px 4px; }
-.rc-history th, .rc-history td { text-align: center; padding: .2em .25em; }
+.rc-history table { table-layout: fixed; border-spacing: 4px 4px; }
+.rc-history th, .rc-history td { text-align: center; padding: .2em .2em; }
 .rc-history th:first-child { width: clamp(28px, 2.3vw, 48px); padding-left: 0; text-align: left; }
-.rc-history thead th { font-size: clamp(9.5px, .72vw, 14px); padding-bottom: .35em; }
+.rc-history thead th { font-size: clamp(9.5px, .72vw, 14px); padding-bottom: .35em; white-space: nowrap; }
 .rc-history thead .rc-current, .rc-history tfoot { color: var(--rc-sold); }
 .rc-history tbody th, .rc-history tfoot th { font-size: clamp(10.5px, .82vw, 16px); text-align: left; }
 .rc-history tbody th { font-weight: 500; color: var(--rc-muted); }

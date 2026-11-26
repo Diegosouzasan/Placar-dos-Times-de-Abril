@@ -344,7 +344,7 @@ export default function RecessoCampaignControls({ tvNames }: { tvNames: string[]
             </div>
           </div>
 
-          {/* Teams Stacked Vertically (Full Width so all 6 weeks fit cleanly without clipping) */}
+          {/* Teams Stacked Vertically (Full Width so all 7 weeks fit cleanly without clipping) */}
           <div className="space-y-6">
             {snapshot.teams.map(team => (
               <article

@@ -9,7 +9,7 @@ import type {
 const ids: RecessoTeamId[] = ['ivanize', 'claudenise']
 const names = { ivanize: 'Time Ivanize', claudenise: 'Time Claudenise' }
 const goalCents = 1_200_000_000
-const firstDate = '2026-11-13'
+const firstDate = '2026-11-02'
 const endDate = '2026-12-18'
 const campaignDaysOff = new Set(['2026-11-20'])
 const dayMs = 86_400_000
@@ -129,6 +129,10 @@ export function createRecessoStore(file: string, clock: () => Date = () => new D
   function write(key: string, value: unknown) {
     db.prepare('INSERT OR REPLACE INTO settings VALUES (?,?)').run(key, JSON.stringify(value))
   }
+  const initialConfig = read('config', configDefault)
+  if (!initialConfig.startDate || initialConfig.startDate > firstDate) {
+    write('config', { ...initialConfig, startDate: firstDate })
+  }
   function nextStamp() {
     const at = clock().getTime() * 1000
     const micros = Math.max(at, read('lastMicros', 0) + 1)
@@ -150,7 +154,8 @@ export function createRecessoStore(file: string, clock: () => Date = () => new D
 
   function getSnapshot(): RecessoSnapshot {
     const config = read('config', configDefault)
-    const dates = businessDates(config.startDate, endDate)
+    const startDate = config.startDate && config.startDate <= firstDate ? config.startDate : firstDate
+    const dates = businessDates(startDate, endDate)
     const today = saoPauloDate(clock())
     const weekMonday = mondayOf(today)
     const daysRemaining = dates.filter(date => date >= today && !campaignDaysOff.has(date)).length
@@ -225,7 +230,7 @@ export function createRecessoStore(file: string, clock: () => Date = () => new D
       for (const team of teams) team.weeklyTargetCents = team.dailyTargetCents * 5
     }
     return {
-      revision: config.revision, today, startDate: config.startDate, endDate, dates,
+      revision: config.revision, today, startDate, endDate, dates,
       goalCents, soldCents, remainingCents, daysRemaining, sellerCount, dailyTargetCents,
       perSellerCents: sellerCount ? Math.round(dailyTargetCents / sellerCount) : 0,
       weeklyTargetCents: dailyTargetCents * 5,

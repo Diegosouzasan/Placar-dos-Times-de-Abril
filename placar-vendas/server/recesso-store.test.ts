@@ -28,21 +28,21 @@ function fixture(initial = '2026-11-13T12:00:00Z', file = ':memory:') {
   }
 }
 
-test('25 dias úteis com folga em 20/11, alocação por efetivo e fim inclusivo em 18/12', () => {
-  const {store, setClock} = fixture()
+test('34 dias úteis desde 02/11 com folga em 20/11, alocação por efetivo e fim inclusivo em 18/12', () => {
+  const {store, setClock} = fixture('2026-11-02T12:00:00Z')
   const first = store.getSnapshot()
-  assert.equal(first.startDate, '2026-11-13')
-  assert.equal(first.dates.length, 26)
-  assert.equal(first.daysRemaining, 25)
+  assert.equal(first.startDate, '2026-11-02')
+  assert.equal(first.dates.length, 35)
+  assert.equal(first.daysRemaining, 34)
   assert.equal(first.dates.includes('2026-11-20'), true)
   assert.equal(first.dates[0], first.startDate)
-  assert.equal(first.dates[1], '2026-11-16')
+  assert.equal(first.dates[1], '2026-11-03')
   assert.equal(first.endDate, '2026-12-18')
   assert.equal(first.dates.at(-1), first.endDate)
   assert.equal(first.sellerCount, 3)
-  assert.equal(first.dailyTargetCents, 48000000)
-  assert.equal(first.teams[0].dailyTargetCents, 32000000)
-  assert.equal(first.teams[1].weeklyTargetCents, 80000000)
+  assert.equal(first.dailyTargetCents, Math.round(first.goalCents / 34))
+  assert.equal(first.teams[0].dailyTargetCents, Math.round(first.dailyTargetCents * 2 / 3))
+  assert.equal(first.teams[1].weeklyTargetCents, first.teams[1].dailyTargetCents * 5)
   const startingSale = {requestId:'primeiro',teamId:'ivanize' as const,date:first.startDate,amountCents:500}
   store.addEntry(startingSale)
   setClock('2026-11-20T15:00:00Z')
@@ -276,13 +276,60 @@ test('saldo legado é preservado ao abrir, mas não absorve novas correções ap
   reopened.close()
 })
 
-test('histórico agrupa semanas reais e mantém lacunas antes do início da campanha', () => {
-  const {store} = fixture()
+test('histórico agrupa 7 semanas desde 02/11 e mantém lacunas quando há início parcial', () => {
+  const {store} = fixture('2026-11-26T15:00:00Z')
   const weeks = recessoHistoryWeeks(store.getSnapshot().dates)
-  assert.equal(weeks.length, 6)
-  assert.deepEqual(weeks[0], [null,null,null,null,'2026-11-13'])
-  assert.deepEqual(weeks[1], ['2026-11-16','2026-11-17','2026-11-18','2026-11-19','2026-11-20'])
-  assert.deepEqual(weeks[2], ['2026-11-23','2026-11-24','2026-11-25','2026-11-26','2026-11-27'])
+  assert.equal(weeks.length, 7)
+  assert.deepEqual(weeks[0], ['2026-11-02','2026-11-03','2026-11-04','2026-11-05','2026-11-06'])
+  assert.deepEqual(weeks[1], ['2026-11-09','2026-11-10','2026-11-11','2026-11-12','2026-11-13'])
+  assert.deepEqual(weeks[2], ['2026-11-16','2026-11-17','2026-11-18','2026-11-19','2026-11-20'])
+  assert.deepEqual(weeks[3], ['2026-11-23','2026-11-24','2026-11-25','2026-11-26','2026-11-27'])
   assert.deepEqual(weeks.flat().filter(Boolean), store.getSnapshot().dates)
+  assert.deepEqual(recessoHistoryWeeks(['2026-11-13']), [[null,null,null,null,'2026-11-13']])
+  store.close()
+})
+
+test('dias de 02/11 a 12/11 contam na meta, são editáveis e migram bases antigas', () => {
+  const folder = mkdtempSync(join(tmpdir(), 'campanha-inicio-02-'))
+  temporary.push(folder)
+  const file = join(folder, 'campaign.sqlite')
+  const legacy = new DatabaseSync(file)
+  legacy.exec('CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
+  legacy.prepare('INSERT INTO settings VALUES (?,?)').run('config', JSON.stringify({
+    revision: 3, startDate: '2026-11-13',
+    teams: {
+      ivanize: { openingCents: 0, sellerCount: 0, sellerIds: [], sourceTeamId: null },
+      claudenise: { openingCents: 0, sellerCount: 0, sellerIds: [], sourceTeamId: null },
+    },
+    destinations: { 'INSS:*': true },
+  }))
+  legacy.close()
+
+  const { store, event } = fixture('2026-11-26T15:00:00Z', file)
+  store.applySource({
+    roster,
+    events: [
+      event('nov-03', 100000, '2026-11-03T15:00:00Z'),
+      event('nov-12', 200000, '2026-11-12T15:00:00Z'),
+      event('nov-26', 50000, '2026-11-26T14:00:00Z'),
+    ],
+  })
+  let snap = store.getSnapshot()
+  assert.equal(snap.startDate, '2026-11-02')
+  assert.equal(snap.destinations['INSS:*'], true)
+  assert.equal(snap.soldCents, 350000)
+  assert.equal(snap.remainingCents, snap.goalCents - 350000)
+  assert.equal(snap.weekCents, 50000)
+  assert.equal(snap.dayCents, 50000)
+
+  snap = store.setDayTotal({ requestId: 'edit-02', teamId: 'ivanize', date: '2026-11-02', expectedCents: 0, amountCents: 25000 })
+  assert.equal(snap.teams[0].days['2026-11-02'], 25000)
+  assert.equal(snap.soldCents, 375000)
+  assert.equal(snap.weekCents, 50000)
+
+  snap = store.setDayTotal({ requestId: 'edit-03', teamId: 'ivanize', date: '2026-11-03', expectedCents: 100000, amountCents: 150000 })
+  assert.equal(snap.teams[0].days['2026-11-03'], 150000)
+  assert.equal(snap.soldCents, 425000)
+  assert.equal(snap.remainingCents, snap.goalCents - 425000)
   store.close()
 })

@@ -6,7 +6,7 @@ import type { RecessoSourcePayload } from './recesso-store.ts'
 test('a origem do INSS identifica as supervisoras e importa inclusive a segunda página sem filtrar por pagamento', async t => {
   const sales = Array.from({ length: 501 }, (_, i) => ({
     id: String(i), seller_id: i % 2 === 0 ? 22 : 31, amount: i === 500 ? '-123.45' : '15.08',
-    created_at: i === 500 ? '2026-12-19T02:59:59.999999Z' : '2026-11-14T01:30:00Z',
+    created_at: i === 500 ? '2026-12-19T02:59:59.999999Z' : '2026-11-03T01:30:00Z',
   }))
   const offsets: number[] = []
   t.mock.method(globalThis, 'fetch', (url: URL) => {
@@ -27,20 +27,20 @@ test('a origem do INSS identifica as supervisoras e importa inclusive a segunda 
     }
     assert.equal(table, 'sales_history')
     assert.equal(query.get('seller_id'), 'in.(22,31)')
-    assert.equal(query.get('and'), '(created_at.gte.2026-11-13T00:00:00-03:00,created_at.lte.2026-12-18T23:59:59.999999-03:00)')
+    assert.equal(query.get('and'), '(created_at.gte.2026-11-02T00:00:00-03:00,created_at.lte.2026-12-18T23:59:59.999999-03:00)')
     const offset = Number(query.get('offset'))
     offsets.push(offset)
     return Response.json(sales.slice(offset, offset + Number(query.get('limit'))))
   })
   const writes: RecessoSourcePayload[] = []
   await syncRecessoSource({
-    getSnapshot: () => ({startDate: '2026-11-13', endDate: '2026-12-18'}),
+    getSnapshot: () => ({startDate: '2026-11-02', endDate: '2026-12-18'}),
     applySource: source => { writes.push(source) },
   })
   assert.deepEqual(offsets, [0, 500])
   assert.equal(writes.length, 1)
   assert.equal(writes[0].events.length, 501)
-  assert.equal(writes[0].events[0].date, '2026-11-13')
+  assert.equal(writes[0].events[0].date, '2026-11-02')
   assert.equal(writes[0].events[500].date, '2026-12-18')
   assert.equal(writes[0].events[500].amountCents, -12345)
   assert.equal(writes[0].events[1].teamId, 'claudenise')
